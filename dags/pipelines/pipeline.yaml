@@ -1,0 +1,48 @@
+schema: "https://myorg.com/schemas/pipeline/v1"
+pipeline:
+  name: "globalise_etl_pipeline"
+  description: "Reads data from Django API"
+  schedule: "@daily"
+#  params:
+#    location: ""  # Default value
+
+  tasks:
+#    fetch_django_api:
+#      type: "django.read"
+#      endpoint: "http://host.docker.internal/api/{location}/"
+#      entity:
+#        location: "location"
+#      output_trace: "ttl"
+    test_comunica:
+      type: "EmitTTLOperator"
+      input_file_path: "http://nginx/locations.ttl"
+      output_store: "ttl"
+      output_trace: "ttl"
+
+    save_file_ttl:
+      type: "SaveFileTTLOperator"
+      output_trace: "ttl"
+      output_store: "ttl"
+
+    run_sparql_comunica:
+      type: "RunSparqlComunicaOperator"
+      docker_image: "comunica/query-sparql"
+      docker_network: "traefik-public"
+      docker_rdf_file: "http://nginx/locations.ttl"
+      docker_output_format: "text/csv"
+      output_trace: "csv"
+      output_store: "csv"
+      query: "SELECT ?subject ?predicate ?object
+WHERE {
+  ?subject ?predicate ?object.
+} LIMIT 50"
+#      query: "/tmp/query.sparql"
+
+    csv_iterator:
+      type: "CSVIteratorOperator"
+      output_trace: "csv"
+      tasks:
+        print_csv_row1:
+          type: "PrintOperator"
+        print_csv_row2:
+          type: "PrintOperator"

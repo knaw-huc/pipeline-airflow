@@ -1,0 +1,26 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# IDE
+.idea
+
+**/.env
+**/stack.env
+
+org_yaml
+
+# Airflow specific files
+airflow_postgres_data
+config
+logs
+plugins
+sample_data
+

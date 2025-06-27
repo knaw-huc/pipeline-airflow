@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Django Pipeline Schema",
+  "type": "object",
+  "properties": {
+    "schema": { "type": "string" },
+    "pipeline": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "schedule": { "type": "string" },
+        "params": {
+          "type": "object",
+          "properties": {
+            "location": { "type": "string" }
+          }
+        },
+        "tasks": {
+          "type": "object",
+          "patternProperties": {
+            "^.*$": {
+              "type": "object",
+              "properties": {
+                "type": { "const": "django.read" },
+                "endpoint": { "type": "string" },
+                "entity": { "type": "object" },
+                "output_trace": { "type": "string" }
+              },
+              "required": ["type", "endpoint"]
+            }
+          }
+        }
+      },
+      "required": ["name", "tasks"]
+    }
+  },
+  "required": ["pipeline"]
+}
