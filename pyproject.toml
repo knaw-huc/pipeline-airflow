@@ -1,0 +1,19 @@
+[project]
+name = "globalise-etl-pipeline"
+version = "0.0.1"
+description = "This project provides an ETL pipeline based on Apache Airflow with DAG Factory for managing and executing data workflows."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "apache-airflow>=3.0.2",
+    "dag-factory>=0.22.0",
+    "httpx>=0.28.1",
+    "jsonschema>=4.24.0",
+    "pyyaml>=6.0.2",
+    "rdflib>=7.1.4",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.11.13",
+]
