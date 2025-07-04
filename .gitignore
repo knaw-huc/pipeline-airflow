@@ -14,7 +14,7 @@ wheels/
 
 **/.env
 **/stack.env
-
+**/*.log
 org_yaml
 
 # Airflow specific files
