@@ -7,17 +7,17 @@ pipeline:
 #    location: ""  # Default value
 
   tasks:
-#    fetch_django_api:
-#      type: "django.read"
-#      endpoint: "http://host.docker.internal/api/{location}/"
-#      entity:
-#        location: "location"
-#      output_trace: "ttl"
-    test_comunica:
-      type: "EmitTTLOperator"
-      input_file_path: "http://nginx/locations.ttl"
-      output_store: "ttl"
+    fetch_api_with_page:
+      type: "FetchAPIWithPageOperator"
+      table_name: "location"
+      distance: 3
       output_trace: "ttl"
+      output_store: "ttl"
+#    test_comunica:
+#      type: "EmitTTLOperator"
+#      input_file_path: "http://nginx/locations.ttl"
+#      output_store: "ttl"
+#      output_trace: "ttl"
 
     save_file_ttl:
       type: "SaveFileTTLOperator"
@@ -32,11 +32,20 @@ pipeline:
       docker_output_format: "text/csv"
       output_trace: "csv"
       output_store: "csv"
-      query: "SELECT ?subject ?predicate ?object
-WHERE {
-  ?subject ?predicate ?object.
-} LIMIT 50"
+#      query: "SELECT ?subject ?predicate ?object
+#WHERE {
+#  ?subject ?predicate ?object.
+#} LIMIT 50"
 #      query: "/tmp/query.sparql"
+      query: "
+  SELECT * { 
+    ?ts a <http://example.globalise.nl/temp/timespan>;
+      <http://example.globalise.nl/temp/timespan/year_earliest_begin> ?yeb;
+      <http://example.globalise.nl/temp/timespan/year_earliest_end> ?yee;
+      <http://example.globalise.nl/temp/timespan/year_latest_begin> ?ylb;
+      <http://example.globalise.nl/temp/timespan/year_latest_end> ?yle;
+  } LIMIT 50
+  "
 
     csv_iterator:
       type: "CSVIteratorOperator"

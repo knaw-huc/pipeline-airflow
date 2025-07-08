@@ -40,7 +40,7 @@ class CSVIteratorOperator(BaseOperator):
             reader = csv.DictReader(csv_data.splitlines())
             final_result: list = []
             for row_number, row in enumerate(reader, start=1):
-                self.logger.info(f"Interating: row {row_number}: {row}")
+                self.logger.info(f"Iterating: row {row_number}: {row}")
                 context['ti'].xcom_push(key=f"{self.output_trace}_{row_number}", value=row)
                 self.logger.info(f"Row {row_number} pushed to XCom with key: {self.output_trace}_{row_number}")
 
