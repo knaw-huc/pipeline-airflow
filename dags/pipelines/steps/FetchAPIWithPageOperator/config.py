@@ -5,7 +5,7 @@ config = {
     "outputJsonLd": "output.jsonld",
     "outputRdf": "output.ttl",
     "api": {
-        "baseURL": "http://localhost/api"
+        "baseURL": "http://host.docker.internal/api/"
     },
     "context": {
         "baseURI": "http://example.globalise.nl/temp",

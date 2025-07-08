@@ -1,11 +1,16 @@
 import os
 import json
+import httpx
 import logging
 import argparse
-from typing import Dict, List, Any, Union
-import httpx
 from rdflib import Graph
-from config import config
+from airflow.models import BaseOperator
+from typing import Dict, List, Any, Union, LiteralString
+from .config import config
+from utils import get_step_names
+
+# TODO: FIX error in adding context to JSON-LD, all the fields are missing now
+
 
 # Setup logging
 logging.basicConfig(
@@ -31,7 +36,7 @@ table_map = {
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Convert JSON-LD to TTL")
+    parser = argparse.ArgumentParser(description="Fetch related tables starting from a given table from Globalise API in JSON-LD and Turtle")
     parser.add_argument('-t', '--tableName', type=str, help='Name of the table', default="location")
     parser.add_argument('-d', '--distance', type=int, help='Distance from the given table', default=3)
     return parser.parse_args()
@@ -148,7 +153,7 @@ def validate_ttl(ttl: str) -> bool:
         return False
 
 
-def save_json_ld_to_file(json_ld: Dict, file_path: str) -> None:
+def save_json_ld_to_file(json_ld: Dict, file_path: LiteralString) -> None:
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     with open(file_path, 'w', encoding='utf-8') as f:
         json.dump(json_ld, f, indent=2)
@@ -345,11 +350,7 @@ def add_record_to_graph(
     return json_ld
 
 
-def main():
-    args = parse_args()
-    table_name = args.tableName
-    distance: int = args.distance
-
+def main(table_name: str, distance: int = 3):
     if not table_name:
         logger.error("No table name provided")
         return
@@ -413,17 +414,19 @@ def main():
         output_dir = config["outputDir"]
         os.makedirs(output_dir, exist_ok=True)
 
-        output_json_path = os.path.join(output_dir, config["outputJsonLd"])
+        output_json_path: LiteralString = os.path.join(output_dir, config["outputJsonLd"])
         save_json_ld_to_file(json_ld, output_json_path)
 
         try:
             turtle = convert_json_ld_to_ttl(json_ld)
 
             if validate_ttl(turtle):
-                output_ttl_path = os.path.join(output_dir, config["outputRdf"])
-                with open(output_ttl_path, "w", encoding="utf-8") as f:
-                    f.write(turtle)
-                logger.info(f"Turtle data saved to {output_ttl_path}")
+                # output_ttl_path = os.path.join(output_dir, config["outputRdf"])
+                # with open(output_ttl_path, "w", encoding="utf-8") as f:
+                #     f.write(turtle)
+                # logger.info(f"Turtle data saved to {output_ttl_path}")
+                logger.info(f"Turtle successfully converted from JSON-LD")
+                return turtle
             else:
                 logger.error("TTL is not valid")
                 return
@@ -436,5 +439,31 @@ def main():
         http_client.close()
 
 
+class FetchAPIWithPageOperator(BaseOperator):
+    def __init__(self, table_name: str, distance: int, output_trace: str, output_store: str, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.table_name = table_name
+        self.distance = distance
+        self.output_trace = output_trace
+        self.output_store = output_store
+        self.logger = logging.getLogger(__name__)
+
+    def execute(self, context):
+        step_names: dict = get_step_names(context)
+        # Run the main function
+        ttl_data = main(self.table_name, self.distance)
+        # Push the output to XCom
+        if self.output_trace:
+            context['ti'].xcom_push(key=f"{step_names.get("current_step").task_id}_{self.output_store}", value=ttl_data)
+            self.logger.info("TTL data pushed to XCom successfully")
+        if self.output_store:
+            with open(f"{step_names.get("current_step").task_id}.{self.output_store}", "w", encoding="utf-8") as f:
+                f.write(ttl_data)
+            self.logger.info(f"TTL data saved to {step_names.get('current_step').task_id}.{self.output_store}")
+        return ttl_data
+
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    table_name = args.tableName
+    distance: int = args.distance
+    main(table_name, distance)
