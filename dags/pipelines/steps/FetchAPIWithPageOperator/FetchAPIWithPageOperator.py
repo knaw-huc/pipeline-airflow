@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import httpx
 import logging
@@ -35,8 +36,18 @@ table_map = {
 }
 
 
+# def get_step_names(context):
+#     current_step = context['task']
+#     previous_steps = [task for task in context['task'].upstream_list]
+#     return {
+#         "current_step": current_step,
+#         "previous_steps": previous_steps
+#     }
+
+
 def parse_args():
-    parser = argparse.ArgumentParser(description="Fetch related tables starting from a given table from Globalise API in JSON-LD and Turtle")
+    parser = argparse.ArgumentParser(
+        description="Fetch related tables starting from a given table from Globalise API in JSON-LD and Turtle")
     parser.add_argument('-t', '--tableName', type=str, help='Name of the table', default="location")
     parser.add_argument('-d', '--distance', type=int, help='Distance from the given table', default=3)
     return parser.parse_args()
@@ -79,9 +90,8 @@ def add_table_fields_to_context(json_ld: Dict, table_name: str, fields: Dict, ta
         if table_name == "location2externalid":
             key_tuple = [t for t in key_tuple if t[0] != 'relation-location2externalid']
 
-        if len(key_tuple) > 1:
-            context[key_tuple[0][0]] = key_tuple[1][1]
-            context[key_tuple[1][0]] = key_tuple[0][1]
+        context[key_tuple[0][0]] = key_tuple[1][1]
+        context[key_tuple[1][0]] = key_tuple[0][1]
 
     json_ld["@context"] = context
     return json_ld
@@ -128,6 +138,41 @@ def get_object_from_path(data: Any, path: str) -> Any:
     return current
 
 
+def extract_ns_prefixes(turtle_str: str) -> dict:
+    """
+    Removes lines starting with '@prefix ns' and returns a dict of nsX: URI mappings.
+    """
+    ns_dict = {}
+    lines = turtle_str.splitlines()
+    pattern = re.compile(r'^@prefix\s+(ns\d+):\s+<([^>]+)>')
+    for line in lines:
+        match = pattern.match(line)
+        if match:
+            ns_dict[match.group(1)] = match.group(2)
+    return ns_dict
+
+
+def remove_ns_prefixes(turtle_str: str) -> str:
+    """
+    Removes lines starting with '@prefix ns' from the Turtle string.
+    """
+    lines = turtle_str.splitlines()
+    return "\n".join(line for line in lines if not line.startswith("@prefix ns"))
+
+
+def expand_ttl(turtle: str, prefix_map: dict) -> str:
+    # Replace nsX:something only when not inside <...>
+    def replacer(match):
+        prefix, local = match.group(1), match.group(2)
+        # logger.info(f"Expanding {prefix}: {prefix_map.get(prefix)} with local part: {local}")
+        if prefix in prefix_map:
+            return f'<{prefix_map[prefix]}{local}>'
+        return match.group(0)
+    # Match nsX:something not preceded by < or inside <...>
+    pattern = re.compile(r'(?<!<)(\bns\d+):([A-Za-z0-9_-]+)\b')
+    return pattern.sub(replacer, turtle)
+
+
 def convert_json_ld_to_ttl(json_ld: Dict) -> str:
     try:
         # Create an RDF graph
@@ -137,7 +182,11 @@ def convert_json_ld_to_ttl(json_ld: Dict) -> str:
         graph.parse(data=json.dumps(json_ld), format="json-ld")
 
         # Serialize the graph to Turtle format
-        return graph.serialize(format="turtle")
+        ttl_str = graph.serialize(format="turtle")
+        ns_prefixes: dict = extract_ns_prefixes(ttl_str)
+        ttl_str = expand_ttl(ttl_str, ns_prefixes)
+        ttl_str = remove_ns_prefixes(ttl_str)
+        return ttl_str
     except Exception as e:
         logger.error(f"Error converting JSON-LD to TTL: {e}")
         raise
@@ -379,7 +428,8 @@ def main(table_name: str, distance: int = 3):
             if related_table_name in config["context"]["mainEntryTables"]:
                 logger.info(f"Processing main table: '{related_table_name}'")
                 table = cache_related_tables[related_table_name]
-                json_ld = add_table_fields_to_context(json_ld, related_table_name, table["metadata"].get("fields", {}))
+                json_ld = add_table_fields_to_context(json_ld, related_table_name,
+                                                      table["metadata"]["metadata"].get("fields", {}))
 
                 for record in table["data"]:
                     json_ld = add_record_to_graph(json_ld, related_table_name, related_tables, record, "", False)
@@ -392,7 +442,8 @@ def main(table_name: str, distance: int = 3):
                     related_table_name not in config["context"]["middleTables"]):
                 logger.info(f"Processing resource table: '{related_table_name}'")
                 table = cache_related_tables[related_table_name]
-                json_ld = add_table_fields_to_context(json_ld, related_table_name, table["metadata"].get("fields", {}))
+                json_ld = add_table_fields_to_context(json_ld, related_table_name,
+                                                      table["metadata"]["metadata"].get("fields", {}))
 
                 for record in table["data"]:
                     json_ld = add_record_to_graph(json_ld, related_table_name, related_tables, record, "", False)
@@ -402,7 +453,8 @@ def main(table_name: str, distance: int = 3):
             if related_table_name in config["context"]["middleTables"]:
                 logger.info(f"Processing middle table: '{related_table_name}'")
                 table = cache_related_tables[related_table_name]
-                json_ld = add_table_fields_to_context(json_ld, related_table_name, table["metadata"].get("fields", {}))
+                json_ld = add_table_fields_to_context(json_ld, related_table_name,
+                                                      table["metadata"]["metadata"].get("fields", {}))
 
                 if related_table_name == "location2externalid":
                     logger.debug(f"Processing record from middle table: '{related_table_name}'")
@@ -421,10 +473,10 @@ def main(table_name: str, distance: int = 3):
             turtle = convert_json_ld_to_ttl(json_ld)
 
             if validate_ttl(turtle):
-                # output_ttl_path = os.path.join(output_dir, config["outputRdf"])
-                # with open(output_ttl_path, "w", encoding="utf-8") as f:
-                #     f.write(turtle)
-                # logger.info(f"Turtle data saved to {output_ttl_path}")
+                output_ttl_path = os.path.join(output_dir, config["outputRdf"])
+                with open(output_ttl_path, "w", encoding="utf-8") as f:
+                    f.write(turtle)
+                logger.info(f"Turtle data saved to {output_ttl_path}")
                 logger.info(f"Turtle successfully converted from JSON-LD")
                 return turtle
             else:
@@ -461,6 +513,7 @@ class FetchAPIWithPageOperator(BaseOperator):
                 f.write(ttl_data)
             self.logger.info(f"TTL data saved to {step_names.get('current_step').task_id}.{self.output_store}")
         return ttl_data
+
 
 if __name__ == "__main__":
     args = parse_args()
