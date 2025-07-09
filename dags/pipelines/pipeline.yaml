@@ -28,7 +28,7 @@ pipeline:
       type: "RunSparqlComunicaOperator"
       docker_image: "comunica/query-sparql"
       docker_network: "traefik-public"
-      docker_rdf_file: "http://nginx/locations.ttl"
+      docker_rdf_file: "http://nginx/output.ttl"
       docker_output_format: "text/csv"
       output_trace: "csv"
       output_store: "csv"
