@@ -51,7 +51,7 @@ pipeline:
       type: "CSVIteratorOperator"
       output_trace: "csv"
       tasks:
-        print_csv_row1:
-          type: "PrintOperator"
-        print_csv_row2:
+        json_to_csv_row:
+          type: "JSONToCSVOperator"
+        print_csv_row:
           type: "PrintOperator"
