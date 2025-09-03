@@ -103,6 +103,17 @@ services:
     networks:
       - traefik-public
 
+  util-server:
+    image: util-server:latest
+    container_name: util-server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - "./tmp:/app/tmp"
+    networks:
+      - traefik-public
+
   postgres:
     image: postgres:13
     environment:
