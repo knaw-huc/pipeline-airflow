@@ -1,8 +1,19 @@
 import os
 import logging
+import httpx
+import tempfile
 import subprocess
+import shutil
 from airflow.models import BaseOperator
 from utils import get_step_names
+
+
+def create_uri_from_file(file_path: str, input_data: dict) -> str | None:
+    file_path = file_path.split(":", 1)[1]
+    file_path = input_data.get(file_path, None)
+    if file_path:
+        return f"http://util-server:8000/static/{os.path.basename(file_path)}"
+    return None
 
 
 class RunSparqlComunicaOperator(BaseOperator):
@@ -21,17 +32,43 @@ class RunSparqlComunicaOperator(BaseOperator):
     def execute(self, context):
         self.logger.info("Running SPARQL query using Comunica Docker image...")
         step_names = get_step_names(context)
+        input_data = context['ti'].xcom_pull(task_ids=None, key='previous_output')
+        self.logger.info(f"Input data: {input_data}")
 
         # Prepare the Docker command
         command = [
-            "docker", "run", "--rm",
+            "docker", "run",
+            "--rm",
+            "--platform", "linux/amd64",
             "--network", self.docker_network,
             "-v", "sample_data_vol:/tmp",
             self.docker_image,
-            self.docker_rdf_file,
         ]
+        # rdf file
+        if self.docker_rdf_file.startswith("file_uri:"):
+            self.docker_rdf_file = create_uri_from_file(self.docker_rdf_file, input_data) or self.docker_rdf_file
+        command.extend([self.docker_rdf_file])
+
+        # sparql query
         if os.path.isfile(self.query):
             command.extend(["-f", self.query])
+        elif self.query.startswith("http://") or self.query.startswith("https://") or self.query.startswith("file_uri:"):
+            if self.query.startswith("file_uri:"):
+                file_uri = create_uri_from_file(self.query, input_data)
+                self.query = file_uri if file_uri else self.query
+            self.logger.info(f"Using file URI: {self.query}")
+            # download the file
+            with httpx.Client() as client:
+                response = client.get(self.query)
+                sparql_query = response.text
+                response.raise_for_status()
+                with tempfile.NamedTemporaryFile(delete=False, mode="w", encoding="utf-8",
+                                                 suffix=".sparql") as tmp_file:
+                    tmp_file.write(response.text)
+                    tmp_file_path = tmp_file.name
+            # command.extend(["-f", tmp_file_path])
+            command.extend(["-q", f"BASE <http://example.globalise.nl/temp/location>\n{sparql_query}"])
+
         else:
             command.extend(["-q", self.query])
 
@@ -42,6 +79,7 @@ class RunSparqlComunicaOperator(BaseOperator):
 
         try:
             # Run the Docker command
+            self.logger.info(os.listdir("/tmp"))  # Ensure /tmp is accessible
             result = subprocess.run(command, capture_output=True, text=True, check=True)
             output = result.stdout
             self.logger.info("SPARQL query executed successfully.")
