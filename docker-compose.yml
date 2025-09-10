@@ -76,6 +76,7 @@ x-airflow-common:
     - ./config:/opt/airflow/config
     - ./plugins:/opt/airflow/plugins
     - sample_data_vol:/opt/airflow/output
+    - sample_data_vol:/tmp
     - /var/run/docker.sock:/var/run/docker.sock
   #    - airflow_dags:/opt/airflow/dags
   #    - airflow_logs:/opt/airflow/logs
@@ -110,7 +111,8 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - "./tmp:/app/tmp"
+#      - "./tmp:/app/tmp"
+      - "sample_data_vol:/app/tmp"
     networks:
       - traefik-public
 
