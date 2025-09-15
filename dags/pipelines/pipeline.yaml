@@ -74,8 +74,11 @@ OPTIONAL {
 #          type: "PrintOperator"
         generate_sparql_per_csv_row:
           type: "XSLTTransformationOperator"
-          fields_file: "http://util-server:8000/static/fields.xml"
-          xslt_file: "http://util-server:8000/static/toSPARQL.xsl"
+          fields_file: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/locations/fields.xml"
+          xslt_file: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/src/toSPARQL.xsl"
+          xslt_params:
+            lookup-uri: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/locations/lookup.xml"
+            ns: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/locations/GLBM_2.xml"
           output_trace: "sparql"
           output_store: "sparql"
         generate_tto_per_csv_row:

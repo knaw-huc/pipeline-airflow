@@ -12,12 +12,14 @@ class XSLTTransformationOperator(BaseOperator):
                  fields_file: str | None = None,
                  output_trace: str | None = None,
                  output_store: str | None = None,
+                 xslt_params: dict | None = None,
                  **kwargs):
         super().__init__(**kwargs)
         self.xslt_file = xslt_file
         self.fields_file = fields_file
         self.output_trace = output_trace
         self.output_store = output_store
+        self.xslt_params = xslt_params
         self.logger = logging.getLogger(__name__)
 
     def execute(self, context):
@@ -41,10 +43,18 @@ class XSLTTransformationOperator(BaseOperator):
                 xslt_doc = proc.parse_xml(xml_uri=self.xslt_file)
                 xsltproc.set_cwd(os.getcwd())
                 executable = xsltproc.compile_stylesheet(stylesheet_node=xslt_doc)
+                # setting calculated params
                 executable.set_parameter("csv", proc.make_string_value(f"file:{csv_output}"))
                 executable.set_parameter("out", proc.make_string_value(f"file:{sparql_output}"))
+                # setting xslt_params
+                self.logger.info(f"Setting params: {self.xslt_params}")
+                for k, v in (self.xslt_params or {}).items():
+                    self.logger.info(f"Setting param: {k}={v}")
+                    executable.set_parameter(k, proc.make_string_value(v))
+                # setting resource file
                 fields_doc = proc.parse_xml(xml_uri=self.fields_file)
                 executable.set_global_context_item(xdm_item=fields_doc)
+                # run the transformation
                 res = executable.call_template_returning_string("main")
 
             shutil.chown(sparql_output, user='airflow', group='root')
