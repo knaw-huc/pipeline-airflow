@@ -1,5 +1,7 @@
 import re
+import os
 import logging
+import argparse
 import pandas as pd
 from airflow.models import BaseOperator
 from rdflib import Graph, URIRef, Literal, Namespace
@@ -57,3 +59,27 @@ class CSVToTTLOperator(BaseOperator):
         else:
             self.logger.info("input data is None")
             return None
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Convert CSV to TTL")
+    parser.add_argument("-i", "--input", required=True, help="Input CSV file")
+    parser.add_argument("-o", "--output", required=True, help="Output TTL file")
+    parser.add_argument("-uri", "--base_uri", required=True, help="Base URI as a string")
+    args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO)
+    if not args.input or not os.path.isfile(args.input):
+        raise FileNotFoundError(f"Input file {args.input} does not exist.")
+    if not args.output:
+        raise ValueError("Output file path must be provided and cannot be empty.")
+    else:
+        output_dir = os.path.dirname(args.output)
+        if not output_dir or not os.path.exists(output_dir):
+            raise FileNotFoundError(f"Output directory {output_dir} does not exist.")
+    if not args.ase_uri or not args.base_uri:
+        raise ValueError("Base URI must be provided and cannot be empty.")
+    if not args.base_uri.startswith("http://") and not args.base_uri.startswith("https://"):
+        raise ValueError("Base URI must start with 'http://' or 'https://'.")
+
+    csv_to_ttl(args.input, args.output, args.base_uri, logging.getLogger(__name__))
