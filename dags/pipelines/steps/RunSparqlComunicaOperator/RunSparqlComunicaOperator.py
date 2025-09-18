@@ -67,7 +67,8 @@ class RunSparqlComunicaOperator(BaseOperator):
                     tmp_file.write(response.text)
                     tmp_file_path = tmp_file.name
             # command.extend(["-f", tmp_file_path])
-            command.extend(["-q", f"BASE <http://example.globalise.nl/temp/location>\n{sparql_query}"])
+            if not sparql_query.strip().lower().startswith("base"):
+                command.extend(["-q", f"BASE <http://example.globalise.nl/temp/location>\n{sparql_query}"])
 
         else:
             command.extend(["-q", self.query])
