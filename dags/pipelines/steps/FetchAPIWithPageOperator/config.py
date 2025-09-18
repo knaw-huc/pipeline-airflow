@@ -18,7 +18,8 @@ config = {
                          "location2externalid", "location2type", "locationtype2source", "locationlabel2source",
                          "locationpartof2source", "shiplabel2source", "ship2externalid", "ship2type",
                          "ship2source", "event2source", "event2location", "translocation2externalid",
-                         "translocation2source", "translocation2location", "locationlabel"
+                         "translocation2source", "translocation2location", "locationlabel", "document2externalid",
+                         "document2type", "page2document"
                          ],
         "mainEntryTables": ["polity", "politylabel", "reign", "ruler", "rulership", "rulershiplabel", "rulerlabel",
                             "shiplabel", "location", "event", "translocation"],
