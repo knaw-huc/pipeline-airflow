@@ -10,9 +10,6 @@ from typing import Dict, List, Any, Union, LiteralString
 from .config import config
 from utils import get_step_names
 
-# TODO: FIX error in adding context to JSON-LD, all the fields are missing now
-
-
 # Setup logging
 logging.basicConfig(
     level=config["logLevel"].upper(),
@@ -34,15 +31,6 @@ table_map = {
     "child_location": "location",
     "parent_location": "location",
 }
-
-
-# def get_step_names(context):
-#     current_step = context['task']
-#     previous_steps = [task for task in context['task'].upstream_list]
-#     return {
-#         "current_step": current_step,
-#         "previous_steps": previous_steps
-#     }
 
 
 def parse_args():
@@ -72,6 +60,9 @@ def init_json_ld() -> Dict:
 
 def add_table_fields_to_context(json_ld: Dict, table_name: str, fields: Dict, table_prefix: str = "") -> Dict:
     context = json_ld["@context"]
+    if table_name in table_map:
+        logger.info(f"Changing table name in context from {table_name} to {table_map[table_name]}")
+        table_name = table_map[table_name]
     table_name_with_prefix = f"{table_prefix}{table_name}" if table_prefix else table_name
 
     if table_name not in config["context"]["middleTables"]:
@@ -84,8 +75,17 @@ def add_table_fields_to_context(json_ld: Dict, table_name: str, fields: Dict, ta
         key_tuple = []
         for field in fields:
             if field not in config["context"]["uniqueField"]:
-                key_tuple.append(
-                    [f"{field}-{table_name}", join_url(config["context"]["baseURI"], field, table_name_with_prefix)])
+                if field in table_map.keys():
+                    logger.debug(f"Mapping field {field} to {table_map[field]}")
+                    key_tuple.append([
+                        f"{table_map[field]}-{table_name}",
+                        join_url(config["context"]["baseURI"], table_map[field], table_name_with_prefix)
+                    ])
+                else:
+                    key_tuple.append(
+                        [f"{field}-{table_name}",
+                         join_url(config["context"]["baseURI"], field, table_name_with_prefix)
+                         ])
 
         if table_name == "location2externalid":
             key_tuple = [t for t in key_tuple if t[0] != 'relation-location2externalid']
@@ -112,29 +112,75 @@ def is_value_in_json(value: Union[str, int, bool], data: Any) -> bool:
     return False
 
 
-def search_json_for_value(data: Any, value: Any, path: str = "") -> str:
+def search_json_for_value2(data, value, path="", obj_type=None, key=None):
     if data == value:
         return path
 
     if isinstance(data, dict):
-        for key in data:
-            result = search_json_for_value(data[key], value, f"{path}.{key}" if path else key)
-            if result:
+        for k, v in data.items():
+            result = search_json_for_value(v, value, f"{path}.{k}" if path else k)
+            if result is not None:
+                return result
+    elif isinstance(data, list):
+        for idx, item in enumerate(data):
+            result = search_json_for_value(item, value, f"{path}[{idx}]" if path else f"[{idx}]")
+            if result is not None:
                 return result
 
-    return ""
+    return None
+
+
+def search_json_for_value(data, filter_dict, path=""):
+    """
+    Recursively search for the path to an object in data that matches the filter_dict.
+    filter_dict should be a dict of key-value pairs to match.
+    Returns the path as a string, or None if not found.
+    """
+    if isinstance(data, dict):
+        # Check if all filter_dict items match in this dict
+        if all(data.get(k) == v for k, v in filter_dict.items()):
+            return path
+        for k, v in data.items():
+            sub_path = f"{path}.{k}" if path else k
+            result = search_json_for_value(v, filter_dict, sub_path)
+            if result is not None:
+                return result
+    elif isinstance(data, list):
+        for idx, item in enumerate(data):
+            sub_path = f"{path}[{idx}]" if path else f"[{idx}]"
+            result = search_json_for_value(item, filter_dict, sub_path)
+            if result is not None:
+                return result
+    return None
 
 
 def get_object_from_path(data: Any, path: str) -> Any:
-    keys = path.split(".")
     current = data
-
-    for key in keys:
+    parent = None
+    # Split by dot, but keep list indices together
+    parts = re.split(r'\.(?![^\[]*\])', path)
+    for part in parts:
+        parent = current
+        # Handle list index, e.g., key[123]
+        match = re.match(r'([^\[]+)(\[(\d+)\])?', part)
+        if not match:
+            return None
+        key = match.group(1)
+        idx = match.group(3)
         if isinstance(current, dict) and key in current:
             current = current[key]
         else:
             return None
-
+        if idx is not None:
+            if isinstance(current, list):
+                i = int(idx)
+                if 0 <= i < len(current):
+                    parent = current
+                    current = current[i]
+                else:
+                    return None
+            else:
+                return None
     return current
 
 
@@ -168,6 +214,7 @@ def expand_ttl(turtle: str, prefix_map: dict) -> str:
         if prefix in prefix_map:
             return f'<{prefix_map[prefix]}{local}>'
         return match.group(0)
+
     # Match nsX:something not preceded by < or inside <...>
     pattern = re.compile(r'(?<!<)(\bns\d+):([A-Za-z0-9_-]+)\b')
     return pattern.sub(replacer, turtle)
@@ -289,6 +336,8 @@ def get_related_tables(table_name: str, tables: Dict) -> Dict:
     table_metadata = fetch_table_metadata(table_name)
 
     for related_table in table_metadata.get("metadata", {}).get("foreign_keys", {}).keys():
+        if related_table in table_map.keys():
+            related_table = table_map[related_table]
         outgoing.append(related_table)
     related_tables[table_name]["outgoing"] = outgoing
 
@@ -297,6 +346,8 @@ def get_related_tables(table_name: str, tables: Dict) -> Dict:
     for table in tables:
         table_metadata = fetch_table_metadata(table)
         if table_name in table_metadata.get("metadata", {}).get("foreign_keys", {}).keys():
+            if table in table_map.keys():
+                table = table_map[table]
             incoming.append(table)
     related_tables[table_name]["incoming"] = incoming
 
@@ -369,10 +420,17 @@ def add_record_to_graph(
         for key in record:
             if key not in config["context"]["uniqueField"]:
                 try:
-                    key_tuple.append([
-                        f"{key}-{table_name}",
-                        join_url(config["context"]["baseURI"], key, record[key])
-                    ])
+                    if key in table_map.keys():
+                        logger.debug(f"Mapping key {key} to {table_map[key]}")
+                        key_tuple.append([
+                            f"{table_map[key]}-{table_name}",
+                            join_url(config["context"]["baseURI"], table_map[key], record[key])
+                        ])
+                    else:
+                        key_tuple.append([
+                            f"{key}-{table_name}",
+                            join_url(config["context"]["baseURI"], key, record[key])
+                        ])
                 except Exception as e:
                     logger.error(
                         f"Error adding record to graph: {e} {config['context']['baseURI']} {key} {json.dumps(record, indent=2)}")
@@ -385,16 +443,47 @@ def add_record_to_graph(
             key1, key2 = key_tuple[0][0], key_tuple[1][0]
             value1, value2 = key_tuple[0][1], key_tuple[1][1]
 
-            path1 = search_json_for_value(json_ld, value2)
-            path2 = search_json_for_value(json_ld, value1)
+            path1 = search_json_for_value(json_ld, {"@type": f"{key1.split("-")[0]}", "@id": value1})
+            path2 = search_json_for_value(json_ld, {"@type": f"{key2.split("-")[0]}", "@id": value2})
+
 
             obj1 = get_object_from_path(json_ld, ".".join(path1.split(".")[:2])) if path1 else None
             obj2 = get_object_from_path(json_ld, ".".join(path2.split(".")[:2])) if path2 else None
 
             if obj1 and obj2:
-                obj1[key1] = {"@id": value1}
-                obj2[key2] = {"@id": value2}
+                if value2.rsplit('/', 1)[0] not in obj1:
+                    obj1[value2.rsplit('/', 1)[0]] = {"@id": value2}
+                else:
+                    if isinstance(obj1[value2.rsplit('/', 1)[0]], list):
+                        if not any(item.get("@id") == value2 for item in obj1[value2.rsplit('/', 1)[0]]):
+                            obj1[value2.rsplit('/', 1)[0]].append({"@id": value2})
+                    elif isinstance(obj1[value2.rsplit('/', 1)[0]], dict):
+                        if obj1[value2.rsplit('/', 1)[0]].get("@id") != value2:
+                            obj1[value2.rsplit('/', 1)[0]] = [obj1[value2.rsplit('/', 1)[0]], {"@id": value2}]
+                    else:
+                        raise Exception(f"Unexpected type for obj1[{value2.rsplit('/', 1)[0]}]: {type(obj1[value2.rsplit('/', 1)[0]])}")
 
+                if value1.rsplit('/', 1)[0] not in obj2:
+                    obj2[value1.rsplit('/', 1)[0]] = {"@id": value1}
+                else:
+                    if isinstance(obj2[value1.rsplit('/', 1)[0]], list):
+                        if not any(item.get("@id") == value1 for item in obj2[value1.rsplit('/', 1)[0]]):
+                            obj2[value1.rsplit('/', 1)[0]].append({"@id": value1})
+                    elif isinstance(obj2[value1.rsplit('/', 1)[0]], dict):
+                        if obj2[value1.rsplit('/', 1)[0]].get("@id") != value1:
+                            obj2[value1.rsplit('/', 1)[0]] = [obj2[value1.rsplit('/', 1)[0]], {"@id": value1}]
+                    else:
+                        raise Exception(f"Unexpected type for obj2[{value1.rsplit('/', 1)[0]}]: {type(obj2[value1.rsplit('/', 1)[0]])}")
+
+                # obj1[value2.rsplit('/', 1)[0]] = {"@id": value2}
+                # obj2[value1.rsplit('/', 1)[0]] = {"@id": value1}
+
+            # if table_name in ("location2countrycode", "ccode"):
+            #     logger.info(f"debugging location2countrycode: {key1=}: {value1=}, {key2=}: {value2=}")
+            #     logger.info(f"  {path1=}, {path2=}")
+            #     logger.info(f"obj1: {json.dumps(obj1, indent=2)}")
+            #     logger.info(f"obj2: {json.dumps(obj2, indent=2)}")
+            #     exit("stop")
     json_ld["@graph"] = graph
     return json_ld
 
@@ -449,16 +538,13 @@ def main(table_name: str, distance: int = 3):
                     json_ld = add_record_to_graph(json_ld, related_table_name, related_tables, record, "", False)
 
         # Process middle tables
+        logger.info("Processing middle tables")
         for related_table_name in related_tables:
             if related_table_name in config["context"]["middleTables"]:
                 logger.info(f"Processing middle table: '{related_table_name}'")
                 table = cache_related_tables[related_table_name]
-                json_ld = add_table_fields_to_context(json_ld, related_table_name,
-                                                      table["metadata"]["metadata"].get("fields", {}))
-
-                if related_table_name == "location2externalid":
-                    logger.debug(f"Processing record from middle table: '{related_table_name}'")
-
+                # json_ld = add_table_fields_to_context(json_ld, related_table_name,
+                #                                       table["metadata"]["metadata"].get("fields", {}))
                 for record in table["data"]:
                     json_ld = add_record_to_graph(json_ld, related_table_name, related_tables, record)
 
