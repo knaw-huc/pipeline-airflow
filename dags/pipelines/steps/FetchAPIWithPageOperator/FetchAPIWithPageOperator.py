@@ -405,10 +405,18 @@ def add_record_to_graph(
                 if key not in config["context"]["uniqueField"] and record[key]:
                     is_outgoing = related_tables[table_name].get("outgoing", []) and key in related_tables[table_name][
                         "outgoing"]
-                    record_data[f"{table_name_with_prefix}-{key}"] = (
-                        {"@id": join_url(config["context"]["baseURI"], key, record[key])}
-                        if is_outgoing else record[key]
-                    )
+                    if table_name == "location" and key == "point":
+                        # Special handling for 'point' field in 'location' table
+                        record_data[f"{table_name_with_prefix}-{key}"] = f"POINT({record[key]["coordinates"][0]},{record[key]["coordinates"][1]})"
+
+                    else:
+                        record_data[f"{table_name_with_prefix}-{key}"] = (
+                            {"@id": join_url(config["context"]["baseURI"], key, record[key])}
+                            if is_outgoing else record[key]
+                        )
+                    # if key == "point":
+                    #     logger.info(f"debug: {table_name=}, {record_data}")
+                    #     exit("stop")
 
         if "records" not in related_tables[table_name]:
             related_tables[table_name]["records"] = []
