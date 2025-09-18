@@ -7,17 +7,17 @@ pipeline:
 #    location: ""  # Default value
 
   tasks:
-#    fetch_api_with_page:
-#      type: "FetchAPIWithPageOperator"
-#      table_name: "location"
-#      distance: 3
-#      output_trace: "ttl"
-#      output_store: "ttl"
-    test_comunica:
-      type: "EmitTTLOperator"
-      input_file_path: "http://nginx/locations.ttl"
-      output_store: "ttl"
+    fetch_api_with_page:
+      type: "FetchAPIWithPageOperator"
+      table_name: "location"
+      distance: 3
       output_trace: "ttl"
+      output_store: "ttl"
+#    test_comunica:
+#      type: "EmitTTLOperator"
+#      input_file_path: "http://nginx/locations.ttl"
+#      output_store: "ttl"
+#      output_trace: "ttl"
 
     save_file_ttl:
       type: "SaveFileTTLOperator"
@@ -62,7 +62,7 @@ OPTIONAL {
         <http://example.globalise.nl/temp/label/label> ?label;
         <http://example.globalise.nl/temp/label/type> ?label_type.
 }
-} limit 10
+} limit 10 OFFSET 10
 "
     csv_iterator:
       type: "CSVIteratorOperator"
@@ -78,7 +78,8 @@ OPTIONAL {
           xslt_file: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/src/toSPARQL.xsl"
           xslt_params:
             lookup-uri: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/locations/lookup.xml"
-            ns: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/locations/GLBM_2.xml"
+            ns-uri: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/locations/GLBM_2.xml"
+            root-uri: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/locations/root.xml"
           output_trace: "sparql"
           output_store: "sparql"
         generate_tto_per_csv_row:
