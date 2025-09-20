@@ -72,26 +72,21 @@ def init_json_ld() -> Dict:
 
 def add_table_fields_to_context(json_ld: Dict, table_name: str, fields: Dict, table_prefix: str = "") -> Dict:
     context = json_ld["@context"]
+    # if table_name in table_map:
+    #     logger.info(f"Changing table name in context from {table_name} to {table_map[table_name]}")
+    #     table_name = table_map[table_name]
     table_name_with_prefix = f"{table_prefix}{table_name}" if table_prefix else table_name
 
-    if table_name not in config["context"]["middleTables"]:
-        context[table_name] = join_url(config["context"]["baseURI"], table_name_with_prefix)
+    context[table_name] = join_url(config["context"]["baseURI"], table_name_with_prefix)
 
-        for field in fields:
-            if field not in config["context"]["uniqueField"]:
+    for field in fields:
+        if field not in config["context"]["uniqueField"]:
+            if field in table_map.keys():
+                logger.debug(f"Mapping field {field} to {table_map[field]}")
+                context[f"{table_name}-{table_map[field]}"] = join_url(config["context"]["baseURI"],
+                                                                       table_name_with_prefix, table_map[field])
+            else:
                 context[f"{table_name}-{field}"] = join_url(config["context"]["baseURI"], table_name_with_prefix, field)
-    else:
-        key_tuple = []
-        for field in fields:
-            if field not in config["context"]["uniqueField"]:
-                key_tuple.append(
-                    [f"{field}-{table_name}", join_url(config["context"]["baseURI"], field, table_name_with_prefix)])
-
-        if table_name == "location2externalid":
-            key_tuple = [t for t in key_tuple if t[0] != 'relation-location2externalid']
-
-        context[key_tuple[0][0]] = key_tuple[1][1]
-        context[key_tuple[1][0]] = key_tuple[0][1]
 
     json_ld["@context"] = context
     return json_ld
@@ -112,29 +107,57 @@ def is_value_in_json(value: Union[str, int, bool], data: Any) -> bool:
     return False
 
 
-def search_json_for_value(data: Any, value: Any, path: str = "") -> str:
-    if data == value:
-        return path
-
+def search_json_for_value(data, filter_dict, path=""):
+    """
+    Recursively search for the path to an object in data that matches the filter_dict.
+    filter_dict should be a dict of key-value pairs to match.
+    Returns the path as a string, or None if not found.
+    """
     if isinstance(data, dict):
-        for key in data:
-            result = search_json_for_value(data[key], value, f"{path}.{key}" if path else key)
-            if result:
+        # Check if all filter_dict items match in this dict
+        if all(data.get(k) == v for k, v in filter_dict.items()):
+            return path
+        for k, v in data.items():
+            sub_path = f"{path}.{k}" if path else k
+            result = search_json_for_value(v, filter_dict, sub_path)
+            if result is not None:
                 return result
-
-    return ""
+    elif isinstance(data, list):
+        for idx, item in enumerate(data):
+            sub_path = f"{path}[{idx}]" if path else f"[{idx}]"
+            result = search_json_for_value(item, filter_dict, sub_path)
+            if result is not None:
+                return result
+    return None
 
 
 def get_object_from_path(data: Any, path: str) -> Any:
-    keys = path.split(".")
     current = data
-
-    for key in keys:
+    parent = None
+    # Split by dot, but keep list indices together
+    parts = re.split(r'\.(?![^\[]*\])', path)
+    for part in parts:
+        parent = current
+        # Handle list index, e.g., key[123]
+        match = re.match(r'([^\[]+)(\[(\d+)\])?', part)
+        if not match:
+            return None
+        key = match.group(1)
+        idx = match.group(3)
         if isinstance(current, dict) and key in current:
             current = current[key]
         else:
             return None
-
+        if idx is not None:
+            if isinstance(current, list):
+                i = int(idx)
+                if 0 <= i < len(current):
+                    parent = current
+                    current = current[i]
+                else:
+                    return None
+            else:
+                return None
     return current
 
 
@@ -354,47 +377,46 @@ def add_record_to_graph(
                 if key not in config["context"]["uniqueField"] and record[key]:
                     is_outgoing = related_tables[table_name].get("outgoing", []) and key in related_tables[table_name][
                         "outgoing"]
-                    record_data[f"{table_name_with_prefix}-{key}"] = (
-                        {"@id": join_url(config["context"]["baseURI"], key, record[key])}
-                        if is_outgoing else record[key]
-                    )
-
-        if "records" not in related_tables[table_name]:
-            related_tables[table_name]["records"] = []
-
-        related_tables[table_name]["records"].append(record_data["@id"])
-        graph.append(record_data)
+                    if table_name == "location" and key == "point":
+                        # Special handling for 'point' field in 'location' table
+                        record_data[f"{table_name_with_prefix}-{key}"] = f"POINT({record[key]["coordinates"][0]},{record[key]["coordinates"][1]})"
+                    else:
+                        if key in table_map.keys():
+                            logger.debug(f"Mapping key {key} to {table_map[key]}")
+                            record_data[f"{table_name}-{table_map[key]}"] = (
+                                {"@id": join_url(config["context"]["baseURI"], table_map[key], record[key])}
+                                if is_outgoing else record[key]
+                            )
+                        else:
+                            record_data[f"{table_name_with_prefix}-{key}"] = (
+                                {"@id": join_url(config["context"]["baseURI"], key, record[key])}
+                                if is_outgoing else record[key]
+                            )
     else:
-        key_tuple = []
         for key in record:
             if key not in config["context"]["uniqueField"]:
+                is_outgoing = related_tables[table_name].get("outgoing", []) and key in related_tables[table_name][
+                    "outgoing"]
                 try:
-                    key_tuple.append([
-                        f"{key}-{table_name}",
-                        join_url(config["context"]["baseURI"], key, record[key])
-                    ])
+                    if table_name == "location" and key == "point":
+                        # Special handling for 'point' field in 'location' table
+                        record_data[f"{table_name_with_prefix}-{key}"] = f"POINT({record[key]["coordinates"][0]},{record[key]["coordinates"][1]})"
+                    else:
+                        if key in table_map.keys():
+                            logger.debug(f"Mapping key {key} to {table_map[key]}")
+                            record_data[f"{table_name_with_prefix}-{table_map[key]}"] = record[key] if not is_outgoing else join_url(config["context"]["baseURI"], table_map[key], record[key])
+                        else:
+                            record_data[f"{table_name_with_prefix}-{key}"] = record[key] if not is_outgoing else join_url(config["context"]["baseURI"], key, record[key])
                 except Exception as e:
                     logger.error(
                         f"Error adding record to graph: {e} {config['context']['baseURI']} {key} {json.dumps(record, indent=2)}")
                     raise
 
-        if table_name == "location2externalid":
-            key_tuple = [t for t in key_tuple if t[0] != 'relation-location2externalid']
+    if "records" not in related_tables[table_name]:
+        related_tables[table_name]["records"] = []
 
-        if len(key_tuple) >= 2:
-            key1, key2 = key_tuple[0][0], key_tuple[1][0]
-            value1, value2 = key_tuple[0][1], key_tuple[1][1]
-
-            path1 = search_json_for_value(json_ld, value2)
-            path2 = search_json_for_value(json_ld, value1)
-
-            obj1 = get_object_from_path(json_ld, ".".join(path1.split(".")[:2])) if path1 else None
-            obj2 = get_object_from_path(json_ld, ".".join(path2.split(".")[:2])) if path2 else None
-
-            if obj1 and obj2:
-                obj1[key1] = {"@id": value1}
-                obj2[key2] = {"@id": value2}
-
+    related_tables[table_name]["records"].append(record_data["@id"])
+    graph.append(record_data)
     json_ld["@graph"] = graph
     return json_ld
 
