@@ -5,6 +5,7 @@ import httpx
 import logging
 import argparse
 from rdflib import Graph
+from urllib.parse import urlparse
 from airflow.models import BaseOperator
 from typing import Dict, List, Any, Union, LiteralString
 from .config import config
@@ -51,6 +52,15 @@ def parse_args():
     parser.add_argument('-t', '--tableName', type=str, help='Name of the table', default="location")
     parser.add_argument('-d', '--distance', type=int, help='Distance from the given table', default=3)
     return parser.parse_args()
+
+
+def is_valid_uri(uri: str) -> bool:
+    try:
+        result = urlparse(uri)
+        # Check for scheme and netloc for URLs, or at least scheme for URIs
+        return all([result.scheme, result.netloc or result.path])
+    except Exception:
+        return False
 
 
 def join_url(base: str, *paths: str) -> str:
@@ -191,6 +201,7 @@ def expand_ttl(turtle: str, prefix_map: dict) -> str:
         if prefix in prefix_map:
             return f'<{prefix_map[prefix]}{local}>'
         return match.group(0)
+
     # Match nsX:something not preceded by < or inside <...>
     pattern = re.compile(r'(?<!<)(\bns\d+):([A-Za-z0-9_-]+)\b')
     return pattern.sub(replacer, turtle)
@@ -353,6 +364,36 @@ def get_related_tables_with_distance(
     return related_tables
 
 
+def _add_each_field(key, record_data, table_name_with_prefix, table_name, record, is_outgoing):
+    if table_name == "location" and key == "point":
+        # Special handling for 'point' field in 'location' table
+        record_data[
+            f"{table_name_with_prefix}-{key}"] = f"POINT({record[key]["coordinates"][0]},{record[key]["coordinates"][1]})"
+    else:
+        if key in table_map.keys():
+            logger.debug(f"Mapping key {key} to {table_map[key]}")
+            if is_outgoing:
+                record_data[f"{table_name_with_prefix}-{table_map[key]}"] = (
+                    {"@id": join_url(config["context"]["baseURI"], table_map[key], record[key])}
+                )
+            elif is_valid_uri(record[key]):
+                record_data[f"{table_name_with_prefix}-{table_map[key]}"] = (
+                    {"@id": record[key]}
+                )
+            else:
+                 record_data[f"{table_name_with_prefix}-{table_map[key]}"] = record[key]
+        else:
+            if is_outgoing:
+                record_data[f"{table_name_with_prefix}-{key}"] = (
+                    {"@id": join_url(config["context"]["baseURI"], key, record[key])})
+            elif is_valid_uri(record[key]):
+                record_data[f"{table_name_with_prefix}-{key}"] = (
+                    {"@id": record[key]})
+            else:
+                record_data[f"{table_name_with_prefix}-{key}"] = record[key]
+    return record_data
+
+
 # Record processing
 def add_record_to_graph(
         json_ld: Dict,
@@ -377,36 +418,14 @@ def add_record_to_graph(
                 if key not in config["context"]["uniqueField"] and record[key]:
                     is_outgoing = related_tables[table_name].get("outgoing", []) and key in related_tables[table_name][
                         "outgoing"]
-                    if table_name == "location" and key == "point":
-                        # Special handling for 'point' field in 'location' table
-                        record_data[f"{table_name_with_prefix}-{key}"] = f"POINT({record[key]["coordinates"][0]},{record[key]["coordinates"][1]})"
-                    else:
-                        if key in table_map.keys():
-                            logger.debug(f"Mapping key {key} to {table_map[key]}")
-                            record_data[f"{table_name}-{table_map[key]}"] = (
-                                {"@id": join_url(config["context"]["baseURI"], table_map[key], record[key])}
-                                if is_outgoing else record[key]
-                            )
-                        else:
-                            record_data[f"{table_name_with_prefix}-{key}"] = (
-                                {"@id": join_url(config["context"]["baseURI"], key, record[key])}
-                                if is_outgoing else record[key]
-                            )
+                    record_data = _add_each_field(key, record_data, table_name_with_prefix, table_name, record, is_outgoing)
     else:
         for key in record:
             if key not in config["context"]["uniqueField"]:
                 is_outgoing = related_tables[table_name].get("outgoing", []) and key in related_tables[table_name][
                     "outgoing"]
                 try:
-                    if table_name == "location" and key == "point":
-                        # Special handling for 'point' field in 'location' table
-                        record_data[f"{table_name_with_prefix}-{key}"] = f"POINT({record[key]["coordinates"][0]},{record[key]["coordinates"][1]})"
-                    else:
-                        if key in table_map.keys():
-                            logger.debug(f"Mapping key {key} to {table_map[key]}")
-                            record_data[f"{table_name_with_prefix}-{table_map[key]}"] = record[key] if not is_outgoing else join_url(config["context"]["baseURI"], table_map[key], record[key])
-                        else:
-                            record_data[f"{table_name_with_prefix}-{key}"] = record[key] if not is_outgoing else join_url(config["context"]["baseURI"], key, record[key])
+                    record_data = _add_each_field(key, record_data, table_name_with_prefix, table_name, record, is_outgoing)
                 except Exception as e:
                     logger.error(
                         f"Error adding record to graph: {e} {config['context']['baseURI']} {key} {json.dumps(record, indent=2)}")
