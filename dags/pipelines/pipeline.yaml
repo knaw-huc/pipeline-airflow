@@ -10,7 +10,7 @@ pipeline:
     fetch_api_with_page:
       type: "FetchAPIWithPageOperator"
       table_name: "location"
-      distance: 3
+      distance: 4
       output_trace: "ttl"
       output_store: "ttl"
 #    test_comunica:

@@ -11,7 +11,7 @@ config = {
         "baseURI": "http://example.globalise.nl/temp",
         "uniqueField": ["id", "@type"],
         "stopTables": ["logentry", "permission", "group", "user", "contenttype", "session", "postgisgeometrycolumns",
-                       "postgisspatialrefsys", "places"],
+                       "postgisspatialrefsys", "places", "document", "page"],
         "middleTables": ["timespan2source", "polity2source", "politylabel2source", " rulership2source",
                          "rulershiplabel2source", "rulergender2source", "ruler2source", "rulerlabel2source",
                          "reign2source", "location2countrycode", "location2coordsource", "location2source",
