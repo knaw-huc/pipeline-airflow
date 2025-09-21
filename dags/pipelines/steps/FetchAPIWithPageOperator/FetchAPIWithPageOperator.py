@@ -27,24 +27,7 @@ http_client = httpx.Client(follow_redirects=True, timeout=httpx.Timeout(10.0))
 httpx_log = logging.getLogger("httpx")
 httpx_log.setLevel(logging.ERROR)
 
-table_map = {
-    "ccode": "countrycode",
-    "lifespan": "timespan",
-    "part_of": "locationpartof",
-    "external_id": "externalid",
-    "child_location": "location",
-    "parent_location": "location",
-}
-
-
-# def get_step_names(context):
-#     current_step = context['task']
-#     previous_steps = [task for task in context['task'].upstream_list]
-#     return {
-#         "current_step": current_step,
-#         "previous_steps": previous_steps
-#     }
-
+table_map = config["context"].get("table_map", {})
 
 def parse_args():
     parser = argparse.ArgumentParser(
