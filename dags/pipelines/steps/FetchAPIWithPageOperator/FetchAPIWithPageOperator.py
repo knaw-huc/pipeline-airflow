@@ -82,9 +82,6 @@ def init_json_ld() -> Dict:
 
 def add_table_fields_to_context(json_ld: Dict, table_name: str, fields: Dict, table_prefix: str = "") -> Dict:
     context = json_ld["@context"]
-    # if table_name in table_map:
-    #     logger.info(f"Changing table name in context from {table_name} to {table_map[table_name]}")
-    #     table_name = table_map[table_name]
     table_name_with_prefix = f"{table_prefix}{table_name}" if table_prefix else table_name
 
     context[table_name] = join_url(config["context"]["baseURI"], table_name_with_prefix)
@@ -93,11 +90,15 @@ def add_table_fields_to_context(json_ld: Dict, table_name: str, fields: Dict, ta
         if field not in config["context"]["uniqueField"]:
             if field in table_map.keys():
                 logger.debug(f"Mapping field {field} to {table_map[field]}")
-                context[f"{table_name}-{table_map[field]}"] = join_url(config["context"]["baseURI"],
-                                                                       table_name_with_prefix, table_map[field])
+                # special mapping case for child_location and parent_location to location
+                if field in ["child_location", "parent_location"]:
+                    context[f"{table_name}-{field}"] = join_url(config["context"]["baseURI"], table_name_with_prefix,
+                                                                field)
+                else:
+                    context[f"{table_name}-{table_map[field]}"] = join_url(config["context"]["baseURI"],
+                                                                           table_name_with_prefix, table_map[field])
             else:
                 context[f"{table_name}-{field}"] = join_url(config["context"]["baseURI"], table_name_with_prefix, field)
-
     json_ld["@context"] = context
     return json_ld
 
@@ -373,15 +374,31 @@ def _add_each_field(key, record_data, table_name_with_prefix, table_name, record
         if key in table_map.keys():
             logger.debug(f"Mapping key {key} to {table_map[key]}")
             if is_outgoing:
-                record_data[f"{table_name_with_prefix}-{table_map[key]}"] = (
-                    {"@id": join_url(config["context"]["baseURI"], table_map[key], record[key])}
-                )
+                if table_name in ["locationpartof"] and key in ["child_location", "parent_location"]:
+                    # special mapping case for child_location and parent_location to location
+                    record_data[f"{table_name_with_prefix}-{key}"] = (
+                        {"@id": join_url(config["context"]["baseURI"], table_map[key], record[key])}
+                    )
+                else:
+                    record_data[f"{table_name_with_prefix}-{table_map[key]}"] = (
+                        {"@id": join_url(config["context"]["baseURI"], table_map[key], record[key])}
+                    )
             elif is_valid_uri(record[key]):
-                record_data[f"{table_name_with_prefix}-{table_map[key]}"] = (
-                    {"@id": record[key]}
-                )
+                if table_name in ["locationpartof"] and key in ["child_location", "parent_location"]:
+                    # special mapping case for child_location and parent_location to location
+                    record_data[f"{table_name_with_prefix}-{key}"] = (
+                        {"@id": record[key]}
+                    )
+                else:
+                    record_data[f"{table_name_with_prefix}-{table_map[key]}"] = (
+                        {"@id": record[key]}
+                    )
             else:
-                 record_data[f"{table_name_with_prefix}-{table_map[key]}"] = record[key]
+                if table_name in ["locationpartof"] and key in ["child_location", "parent_location"]:
+                    # special mapping case for child_location and parent_location to location
+                    record_data[f"{table_name_with_prefix}-{key}"] = record[key]
+                else:
+                    record_data[f"{table_name_with_prefix}-{table_map[key]}"] = record[key]
         else:
             if is_outgoing:
                 record_data[f"{table_name_with_prefix}-{key}"] = (
@@ -420,7 +437,8 @@ def add_record_to_graph(
                         continue
                     is_outgoing = related_tables[table_name].get("outgoing", []) and key in related_tables[table_name][
                         "outgoing"]
-                    record_data = _add_each_field(key, record_data, table_name_with_prefix, table_name, record, is_outgoing)
+                    record_data = _add_each_field(key, record_data, table_name_with_prefix, table_name, record,
+                                                  is_outgoing)
     else:
         for key in record:
             if key not in config["context"]["uniqueField"]:
@@ -429,7 +447,8 @@ def add_record_to_graph(
                 is_outgoing = related_tables[table_name].get("outgoing", []) and key in related_tables[table_name][
                     "outgoing"]
                 try:
-                    record_data = _add_each_field(key, record_data, table_name_with_prefix, table_name, record, is_outgoing)
+                    record_data = _add_each_field(key, record_data, table_name_with_prefix, table_name, record,
+                                                  is_outgoing)
                 except Exception as e:
                     logger.error(
                         f"Error adding record to graph: {e} {config['context']['baseURI']} {key} {json.dumps(record, indent=2)}")
