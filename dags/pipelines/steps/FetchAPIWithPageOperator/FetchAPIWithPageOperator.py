@@ -416,12 +416,16 @@ def add_record_to_graph(
         for key in record:
             if not check_linkage or is_value_in_json(record_data["@id"], related_tables):
                 if key not in config["context"]["uniqueField"] and record[key]:
+                    if record[key] is None or (isinstance(record[key], str) and record[key].strip() == ""):
+                        continue
                     is_outgoing = related_tables[table_name].get("outgoing", []) and key in related_tables[table_name][
                         "outgoing"]
                     record_data = _add_each_field(key, record_data, table_name_with_prefix, table_name, record, is_outgoing)
     else:
         for key in record:
             if key not in config["context"]["uniqueField"]:
+                if record[key] is None or (isinstance(record[key], str) and record[key].strip() == ""):
+                    continue
                 is_outgoing = related_tables[table_name].get("outgoing", []) and key in related_tables[table_name][
                     "outgoing"]
                 try:
