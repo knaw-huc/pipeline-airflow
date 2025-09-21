@@ -34,35 +34,48 @@ pipeline:
       output_store: "csv"
 #      query: "/tmp/query.sparql"
       query: "
-      select * 
-where {
+SELECT *  {
 ?location a <http://example.globalise.nl/temp/location>;
-   	<http://example.globalise.nl/temp/location/_label> ?_label;
-    <http://example.globalise.nl/temp/location/comments> ?comments;
-    <http://example.globalise.nl/temp/location/coord_certainty> ?coord_certainty;
-    <http://example.globalise.nl/temp/location/glob_id> ?glob_id;
-    <http://example.globalise.nl/temp/location/latitude> ?latitude;
-    <http://example.globalise.nl/temp/location/longitude> ?longitude;
-    <http://example.globalise.nl/temp/location/point> ?point.
+   	<http://example.globalise.nl/temp/location/_label> ?_label.
+    
+OPTIONAL { ?location <http://example.globalise.nl/temp/location/glob_id> ?glob_id. }
 
-OPTIONAL {    
-	?location <http://example.globalise.nl/temp/location/location2coordsource> ?_coordsource.
+OPTIONAL { ?location <http://example.globalise.nl/temp/location/coord_certainty> ?coord_certainty. }
+
+OPTIONAL { ?location <http://example.globalise.nl/temp/location/comments> ?comments. }
+
+OPTIONAL {        
+    ?location <http://example.globalise.nl/temp/location/latitude> ?latitude;
+    	<http://example.globalise.nl/temp/location/longitude> ?longitude.
+}
+
+OPTIONAL { ?location <http://example.globalise.nl/temp/location/point> ?point. }
+    
+OPTIONAL {
+    ?_cs <http://example.globalise.nl/temp/location2coordsource/location> ?location;
+    	<http://example.globalise.nl/temp/location2coordsource/source> ?_coordsource.
 	?_coordsource <http://example.globalise.nl/temp/source/page_no> ?coordsource_page_no;
     	<http://example.globalise.nl/temp/source/zotero_url> ?coordsource_zotero_url.
+         OPTIONAL { ?_coordsource <http://example.globalise.nl/temp/source/comments> ?coordsource_comments. }
 }
-    
+
 OPTIONAL {
-    ?location <http://example.globalise.nl/temp/location/location2source> ?_source.
+	?_ls <http://example.globalise.nl/temp/location2source/location> ?location;
+    	<http://example.globalise.nl/temp/location2source/source> ?_source.
 	?_source <http://example.globalise.nl/temp/source/page_no> ?source_page_no;
     	<http://example.globalise.nl/temp/source/zotero_url> ?source_zotero_url.
+ OPTIONAL { ?_source <http://example.globalise.nl/temp/source/comments> ?source_comments. }
 }
-    
+
 OPTIONAL {
-    ?_l <http://example.globalise.nl/temp/label/locationlabel> ?location;
-        <http://example.globalise.nl/temp/label/label> ?label;
-        <http://example.globalise.nl/temp/label/type> ?label_type.
+	?_ll <http://example.globalise.nl/temp/locationlabel/location> ?location;
+        <http://example.globalise.nl/temp/locationlabel/label> ?_l.
+	?_l	<http://example.globalise.nl/temp/label/label> ?label;
+    	<http://example.globalise.nl/temp/label/type> ?label_type.
+  OPTIONAL { ?_l <http://example.globalise.nl/temp/label/comments> ?label_comments. }
 }
-} limit 10 OFFSET 10
+}
+limit 100
 "
     csv_iterator:
       type: "CSVIteratorOperator"
