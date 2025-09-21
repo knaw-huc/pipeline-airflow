@@ -33,6 +33,8 @@ config = {
             "parent_location": "location",
             "predecessor": "reign",
             "successor": "reign",
+            "locationtype": "location2type",
+            "location_relation": "locationpartof"
         }
     },
 }
