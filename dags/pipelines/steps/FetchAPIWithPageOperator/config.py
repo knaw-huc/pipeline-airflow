@@ -23,6 +23,16 @@ config = {
                          ],
         "mainEntryTables": ["polity", "politylabel", "reign", "ruler", "rulership", "rulershiplabel", "rulerlabel",
                             "shiplabel", "location", "event", "translocation"],
-        "notSure": ["locationpartof"]
+        "notSure": ["locationpartof"],
+        "table_map": {
+            "ccode": "countrycode",
+            "lifespan": "timespan",
+            "part_of": "locationpartof",
+            "external_id": "externalid",
+            "child_location": "location",
+            "parent_location": "location",
+            "predecessor": "reign",
+            "successor": "reign",
+        }
     },
 }
