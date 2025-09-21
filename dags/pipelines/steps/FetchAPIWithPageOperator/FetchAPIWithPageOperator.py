@@ -349,7 +349,7 @@ def get_related_tables_with_distance(
 
     table_name = replace_table_name(table_name)
 
-    if distance < 1:
+    if distance < 0:
         return related_tables
 
     current_related_tables = get_related_tables(table_name, tables)
