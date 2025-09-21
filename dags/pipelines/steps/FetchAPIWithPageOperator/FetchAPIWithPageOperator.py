@@ -501,9 +501,6 @@ def main(table_name: str, distance: int = 3):
                 json_ld = add_table_fields_to_context(json_ld, related_table_name,
                                                       table["metadata"]["metadata"].get("fields", {}))
 
-                if related_table_name == "location2externalid":
-                    logger.debug(f"Processing record from middle table: '{related_table_name}'")
-
                 for record in table["data"]:
                     json_ld = add_record_to_graph(json_ld, related_table_name, related_tables, record)
 
