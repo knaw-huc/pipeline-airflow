@@ -35,14 +35,8 @@ class RunSparqlComunicaOperator(BaseOperator):
         input_data = context['ti'].xcom_pull(task_ids=None, key='previous_output')
         self.logger.info(f"Input data: {input_data}")
 
-        # Prepare the Docker command
         command = [
-            "docker", "run",
-            "--rm",
-            "--platform", "linux/amd64",
-            "--network", self.docker_network,
-            "-v", "sample_data_vol:/tmp",
-            self.docker_image,
+            "comunica-sparql",
         ]
         # rdf file
         if self.docker_rdf_file.startswith("file_uri:"):
@@ -60,16 +54,12 @@ class RunSparqlComunicaOperator(BaseOperator):
             # download the file
             with httpx.Client() as client:
                 response = client.get(self.query)
-                sparql_query = response.text
                 response.raise_for_status()
                 with tempfile.NamedTemporaryFile(delete=False, mode="w", encoding="utf-8",
                                                  suffix=".sparql") as tmp_file:
                     tmp_file.write(response.text)
                     tmp_file_path = tmp_file.name
-            # command.extend(["-f", tmp_file_path])
-            if not sparql_query.strip().lower().startswith("base"):
-                command.extend(["-q", f"BASE <http://example.globalise.nl/temp/location>\n{sparql_query}"])
-
+            command.extend(["-f", tmp_file_path])
         else:
             command.extend(["-q", self.query])
 
@@ -80,25 +70,33 @@ class RunSparqlComunicaOperator(BaseOperator):
 
         try:
             # Run the Docker command
+            env = os.environ.copy()
+            env["PATH"] = "/home/airflow/.nvm/versions/node/v22.19.0/bin:" + env["PATH"]
             self.logger.info(os.listdir("/tmp"))  # Ensure /tmp is accessible
-            result = subprocess.run(command, capture_output=True, text=True, check=True)
+            result = subprocess.run(command, capture_output=True, text=True, check=True, env=env)
             output = result.stdout
             self.logger.info("SPARQL query executed successfully.")
-            self.logger.info(f"Query output: {output}")
+            self.logger.debug(f"Query output: {output}")
 
-            # Push the output to XCom if `output_trace` is specified
+            # prepare return result
+            result = {}
+
+            # add output content to output trace if configured
             if self.output_trace:
-                context['ti'].xcom_push(key=f"{step_names.get("current_step").task_id}_{self.output_trace}",
-                                        value=output)
-                self.logger.info(f"Output pushed to XCom with key: {step_names.get("current_step").task_id}_{self.output_trace}")
+                result["result"] = output
 
+            # save output to file if configured
             if self.output_store:
-                output_file_path = f"{step_names.get('current_step').task_id}.{self.output_store}"
+                output_file_path = f"/tmp/{self.task_id}.{self.output_store}"
                 with open(output_file_path, "w", encoding="utf-8") as f:
                     f.write(output)
                 self.logger.info(f"Output saved to {output_file_path}")
+                result[self.output_store] = output_file_path
 
-            return output
+            # push result to XCom
+            if self.output_trace:
+                context["ti"].xcom_push("previous_output", result)
+            return result
         except subprocess.CalledProcessError as e:
             self.logger.error(f"Error while running SPARQL query: {e.stderr}")
             raise RuntimeError(f"SPARQL query execution failed: {e.stderr}")
