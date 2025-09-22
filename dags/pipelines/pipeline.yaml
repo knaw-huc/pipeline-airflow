@@ -95,7 +95,7 @@ limit 100
             root-uri: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/locations/root.xml"
           output_trace: "sparql"
           output_store: "sparql"
-        generate_tto_per_csv_row:
+        generate_ttl_per_csv_row:
           type: "CSVToTTLOperator"
           base_uri: "http://example.globalise.nl/temp/location"
         run_sparql_on_csv_ttl_row:
