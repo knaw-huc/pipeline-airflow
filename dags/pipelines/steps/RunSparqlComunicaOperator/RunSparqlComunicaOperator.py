@@ -5,7 +5,6 @@ import tempfile
 import subprocess
 import shutil
 from airflow.models import BaseOperator
-from utils import get_step_names
 
 
 def create_uri_from_file(file_path: str, input_data: dict) -> str | None:
@@ -30,10 +29,9 @@ class RunSparqlComunicaOperator(BaseOperator):
         self.logger = logging.getLogger(__name__)
 
     def execute(self, context):
-        self.logger.info("Running SPARQL query using Comunica Docker image...")
-        step_names = get_step_names(context)
+        self.logger.info("Running SPARQL query ...")
         input_data = context['ti'].xcom_pull(task_ids=None, key='previous_output')
-        self.logger.info(f"Input data: {input_data}")
+        self.logger.debug(f"Input data: {input_data}")
 
         command = [
             "comunica-sparql",
@@ -50,7 +48,7 @@ class RunSparqlComunicaOperator(BaseOperator):
             if self.query.startswith("file_uri:"):
                 file_uri = create_uri_from_file(self.query, input_data)
                 self.query = file_uri if file_uri else self.query
-            self.logger.info(f"Using file URI: {self.query}")
+            self.logger.debug(f"Using file URI: {self.query}")
             # download the file
             with httpx.Client() as client:
                 response = client.get(self.query)
@@ -72,7 +70,7 @@ class RunSparqlComunicaOperator(BaseOperator):
             # Run the Docker command
             env = os.environ.copy()
             env["PATH"] = "/home/airflow/.nvm/versions/node/v22.19.0/bin:" + env["PATH"]
-            self.logger.info(os.listdir("/tmp"))  # Ensure /tmp is accessible
+            self.logger.debug(os.listdir("/tmp"))  # Ensure /tmp is accessible
             result = subprocess.run(command, capture_output=True, text=True, check=True, env=env)
             output = result.stdout
             self.logger.info("SPARQL query executed successfully.")
