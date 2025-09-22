@@ -75,7 +75,6 @@ OPTIONAL {
   OPTIONAL { ?_l <http://example.globalise.nl/temp/label/comments> ?label_comments. }
 }
 }
-limit 100
 "
     csv_iterator:
       type: "CSVIteratorOperator"
