@@ -1,6 +1,8 @@
 import csv
 import logging
 import importlib
+import os.path
+
 from airflow.models import BaseOperator
 
 
@@ -31,11 +33,20 @@ class CSVIteratorOperator(BaseOperator):
             raise Exception("No previous task found, starting from the beginning.")
 
         try:
-            csv_data = context['ti'].xcom_pull(task_ids=None,
-                                               key=f"{previous_task.task_id}_{previous_task.output_trace}")
+            csv_data = None
+            if previous_task.output_store in previous_task_xcom_data.keys():
+                self.logger.info(f"Loaded CSV data from file path in '{previous_task.output_store}'.")
+                csv_data_path = previous_task_xcom_data.get(previous_task.output_store, None)
+                if not csv_data_path or not isinstance(csv_data_path, str) or not os.path.isfile(csv_data_path):
+                    raise ValueError(f"No file path found in XCom with key: {previous_task.output_store}")
+                with open(csv_data_path, 'r') as file:
+                    csv_data = file.read()
+            else:
+                raise Exception(f"Neither 'result' nor '{previous_task.output_store}' found in XCom data from previous task.")
+
             if not csv_data:
                 raise ValueError(
-                    f"No CSV data found in XCom with key: {previous_task.task_id}_{previous_task.output_trace}")
+                    f"No CSV data found in XCom with key: {previous_task.output_trace}")
 
             reader = csv.DictReader(csv_data.splitlines())
             final_result: list = []
@@ -57,7 +68,6 @@ class CSVIteratorOperator(BaseOperator):
                     sub_task = operator_class(task_id=unique_task_id,
                                               dag=context['dag'],
                                               **task_config_filtered)
-
 
                     self.logger.info(f"Executing sub-task: {unique_task_id}")
                     previous_output = sub_task.execute(context)
