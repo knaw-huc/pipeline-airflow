@@ -17,7 +17,9 @@ class TTLMergerOperator(BaseOperator):
                 for k, v in result.items():
                     if k == "ttl":
                         try:
-                            merged_ttl.parse(v, format="turtle")
+                            with open(v, "r", encoding="utf-8") as fh:
+                                merged_ttl.parse(file=fh, format="n3")
+                            self.logger.info(f"Merging TTL file {v}: {len(merged_ttl)} triples")
                         except Exception as e:
                             self.logger.error(f"Error parsing TTL data: {e}")
 
