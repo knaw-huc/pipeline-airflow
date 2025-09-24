@@ -15,6 +15,9 @@ def create_uri_from_file(file_path: str, input_data: dict) -> str | None:
     return None
 
 
+
+
+
 class RunSparqlComunicaOperator(BaseOperator):
     def __init__(self, docker_image: str, docker_network: str, docker_rdf_file: str, docker_output_format: str,
                  query: str, output_store: str = None, output_trace: str = None, **kwargs):
@@ -27,6 +30,17 @@ class RunSparqlComunicaOperator(BaseOperator):
         self.output_store = output_store
         self.output_trace = output_trace
         self.logger = logging.getLogger(__name__)
+
+    def add_node_to_path(self, env, nvm_dir: str = "/home/airflow/.nvm/versions/node"):
+        node_versions = sorted([d for d in os.listdir(nvm_dir) if d.startswith("v")], reverse=True)
+        if not node_versions:
+            raise RuntimeError("No Node.js version found in NVM directory")
+        for node in node_versions:
+            node_version = node.lstrip("v")
+            node_path = f"{nvm_dir}/v{node_version}/bin"
+            env["PATH"] = f"{node_path}:" + env["PATH"]
+            self.logger.info(f"Adding Node.js version: {node_version} to PATH; PATH: {env['PATH']}")
+        return env
 
     def execute(self, context):
         self.logger.info("Running SPARQL query ...")
@@ -67,9 +81,8 @@ class RunSparqlComunicaOperator(BaseOperator):
         self.logger.info(f"Executing command: {' '.join(command)}")
 
         try:
-            # Run the Docker command
             env = os.environ.copy()
-            env["PATH"] = "/home/airflow/.nvm/versions/node/v22.19.0/bin:" + env["PATH"]
+            env = self.add_node_to_path(env)
             self.logger.debug(os.listdir("/tmp"))  # Ensure /tmp is accessible
             result = subprocess.run(command, capture_output=True, text=True, check=True, env=env)
             output = result.stdout
