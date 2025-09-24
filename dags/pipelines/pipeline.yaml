@@ -106,3 +106,13 @@ OPTIONAL {
           output_trace: "ttl"
           output_store: "ttl"
           query: "file_uri:sparql"
+        collect_ttl_rows:
+          type: "CSVCollectorOperator"
+          message_queue: "all_the_rows"
+    merge_ttl_rows:
+      type: "TTLMergerOperator"
+      message_queue: "all_the_rows"
+    save_merged_ttl:
+      type: "SaveFileTTLOperator"
+      output_trace: "ttl"
+      output_store: "ttl"
