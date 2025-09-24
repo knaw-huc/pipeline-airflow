@@ -15,7 +15,7 @@ pipeline:
       output_store: "ttl"
 #    test_comunica:
 #      type: "EmitTTLOperator"
-#      input_file_path: "http://nginx/locations.ttl"
+#      input_file_path: "http://util-server:8000/static/output.ttl"
 #      output_store: "ttl"
 #      output_trace: "ttl"
 
