@@ -116,3 +116,12 @@ OPTIONAL {
       type: "SaveFileTTLOperator"
       output_trace: "ttl"
       output_store: "ttl"
+    get_unique_places:
+      type: "SplitGraphOperator"
+      main_place_graph: "http://util-server:8000/static/merge_ttl_rows.ttl"
+      places_query: "
+      SELECT ?place
+      WHERE {
+      ?place a <http://www.cidoc-crm.org/cidoc-crm/E53_Place> .
+      }
+      "
