@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 from pathlib import Path
 from rdflib import Graph, URIRef
@@ -7,14 +8,12 @@ from utils import get_step_names
 
 
 class SplitGraphOperator(BaseOperator):
-    def __init__(self, main_place_graph, places_query, **kwargs):
+    def __init__(self, message_queue, output_trace, output_store, **kwargs):
         super().__init__(**kwargs)
-        self.main_place_graph = main_place_graph
+        self.message_queue = message_queue
+        self.output_trace = output_trace
+        self.output_store = output_store
         self.logger = logging.getLogger(__name__)
-
-        # Query all places
-        self.places_query = places_query
-
 
     def add_related_triples(self, graph, entity, main_graph, processed_entities=None):
         if processed_entities is None:
@@ -41,33 +40,44 @@ class SplitGraphOperator(BaseOperator):
                 for p2, o2 in main_graph.predicate_objects(s):
                     graph.add((s, p2, o2))
 
+    def get_place_id(self, ttl):
+        # given a ttl string, return the place id
+        for line in ttl.splitlines():
+            if "a <http://www.cidoc-crm.org/cidoc-crm/E53_Place>" in line:
+                return line.split()[0].strip("<>")
+        return None
+
+    def get_filename_from_id(self, place_id):
+        # given a place id, return the filename
+        if place_id:
+            return place_id.split('/')[-1] + ".ttl"
+        raise ValueError("Place missing or invalid place id")
+
     def execute(self, context):
-        # Create a new graph
-        main_graph = Graph()
-        main_graph.parse(self.main_place_graph, format="turtle")
-        self.logger.info(f"Main graph has {len(main_graph)} triples")
+        input_data = context['ti'].xcom_pull(task_ids=None, key=self.message_queue)
 
         # Process each place
-        counter = 1
-        result = []
-        for row in main_graph.query(self.places_query):
-            self.logger.info(f"Processing place {counter}")
+        counter = 0
+        result = {}
+        for row in input_data:
             counter += 1
-            place_uri = row.place
+            self.logger.info(f"Processing place {counter}")
+            self.logger.info(f"Task id: {self.task_id}: {json.dumps(row, indent=2)}")
+            ttl_string = row.get("result", "")
+            ttl_file_path = row.get("ttl", "")
+            place_id = self.get_place_id(ttl_string)
+            output_filename = self.get_filename_from_id(place_id)
+            output_path = os.path.join("/tmp/", f"{self.task_id}_{output_filename}")
+            self.logger.info(f"Place id: {place_id}")
+            self.logger.info(f"Generated filename: {output_filename}")
 
-            self.logger.info(f"Filter value: {place_uri}")
+            graph = Graph()
+            if place_id in result.keys():
+                graph.parse(output_path, format="turtle")
+            else:
+                result[place_id] = output_path
 
-            # Create a new graph for this place
-            place_graph = Graph()
+            graph.parse(data=ttl_string, format="turtle")
+            graph.serialize(destination=output_path, format="turtle")
 
-            # Add all related triples
-            self.add_related_triples(place_graph, place_uri, main_graph)
-
-            # Generate filename from URI
-            filename = place_uri.split('/')[-1] + ".ttl"
-            output_path = os.path.join("/tmp/", filename)
-
-            # Save to file
-            place_graph.serialize(destination=str(output_path), format="turtle")
-            result.append(output_path)
         return result
