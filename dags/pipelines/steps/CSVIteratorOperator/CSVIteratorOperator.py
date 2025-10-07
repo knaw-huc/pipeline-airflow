@@ -28,7 +28,7 @@ class CSVIteratorOperator(BaseOperator):
         if previous_task:
             self.logger.info(f"Previous task ID: {previous_task.task_id}")
             previous_task_xcom_data = context['ti'].xcom_pull(task_ids=previous_task.task_id)
-            self.logger.info(f"XCom data from previous task: {previous_task_xcom_data}")
+            self.logger.debug(f"XCom data from previous task: {previous_task_xcom_data}")
         else:
             raise Exception("No previous task found, starting from the beginning.")
 
