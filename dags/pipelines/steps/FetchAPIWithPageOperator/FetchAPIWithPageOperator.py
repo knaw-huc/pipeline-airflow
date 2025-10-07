@@ -352,7 +352,7 @@ def _add_each_field(key, record_data, table_name_with_prefix, table_name, record
     if table_name == "location" and key == "point":
         # Special handling for 'point' field in 'location' table
         record_data[
-            f"{table_name_with_prefix}-{key}"] = f"POINT({record[key]["coordinates"][0]},{record[key]["coordinates"][1]})"
+            f"{table_name_with_prefix}-{key}"] = f"POINT({record[key]["coordinates"][0]} {record[key]["coordinates"][1]})"
     else:
         if key in table_map.keys():
             logger.debug(f"Mapping key {key} to {table_map[key]}")
