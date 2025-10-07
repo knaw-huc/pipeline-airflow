@@ -114,4 +114,8 @@ OPTIONAL {
       message_queue: "all_the_rows"
       output_trace: "ttl"
       output_store: "ttl"
-
+    convert_ttl_to_jsonld:
+      type: "ConvertTtlToJsonldOperator"
+      message_queue: "return_value"
+      output_trace: "jsonld"
+      output_store: "jsonld"
