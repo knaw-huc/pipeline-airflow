@@ -75,7 +75,6 @@ x-airflow-common:
     - ./logs:/opt/airflow/logs
     - ./config:/opt/airflow/config
     - ./plugins:/opt/airflow/plugins
-    - sample_data_vol:/opt/airflow/output
     - sample_data_vol:/tmp
     - /var/run/docker.sock:/var/run/docker.sock
   #    - airflow_dags:/opt/airflow/dags
