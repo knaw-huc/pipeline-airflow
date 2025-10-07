@@ -19,10 +19,10 @@ config = {
                          "locationpartof2source", "shiplabel2source", "ship2externalid", "ship2type",
                          "ship2source", "event2source", "event2location", "translocation2externalid",
                          "translocation2source", "translocation2location", "locationlabel", "document2externalid",
-                         "document2type", "page2document"
+                         "document2type", "page2document", "shiplabel"
                          ],
         "mainEntryTables": ["polity", "politylabel", "reign", "ruler", "rulership", "rulershiplabel", "rulerlabel",
-                            "shiplabel", "location", "event", "translocation"],
+                            "location", "event", "translocation"],
         "notSure": ["locationpartof"],
         "table_map": {
             "ccode": "countrycode",
