@@ -30,7 +30,7 @@ class XSLTTransformationOperator(BaseOperator):
 
         input_data = context['ti'].xcom_pull(task_ids=None, key='previous_output')
         if input_data:
-            self.logger.info(f"Input data received: {input_data}")
+            self.logger.debug(f"Input data received: {input_data}")
             # Write input_data to a temporary CSV file if set
             with open(csv_output, 'w') as temp_csv:
             # with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.csv') as temp_csv:
