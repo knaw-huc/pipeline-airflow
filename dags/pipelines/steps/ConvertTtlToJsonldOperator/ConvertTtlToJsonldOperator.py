@@ -74,7 +74,7 @@ class ConvertTtlToJsonldOperator(BaseOperator):
         self.output_store = output_store
         self.logger = logging.getLogger(__name__)
 
-    def ttl_to_jsonld_advanced(self, ttl_file_path, output_file_path, context=None):
+    def ttl_to_jsonld_advanced(self, ttl_file_path, output_file_path, frame=None, context=None):
         # First convert to simple JSON-LD using RDFLib
         g = Graph()
         g.parse(ttl_file_path, format='turtle')
@@ -84,6 +84,10 @@ class ConvertTtlToJsonldOperator(BaseOperator):
         if context:
             compacted = jsonld.compact(jsonld_data, context)
             jsonld_data = compacted
+
+        if frame:
+            framed = jsonld.frame(jsonld_data, frame)
+            jsonld_data = framed
 
         # Write to file
         with open(output_file_path, 'w') as f:
@@ -104,7 +108,11 @@ class ConvertTtlToJsonldOperator(BaseOperator):
 
             output_path = v.replace(".ttl", ".json")
 
-            self.ttl_to_jsonld_advanced(v, output_path, context=json_context)
+            self.ttl_to_jsonld_advanced(v,
+                                        output_path,
+                                        frame="https://gist.githubusercontent.com/LvanWissen/73b8105e8965d874f5bd0bd2890610a1/raw/3aad43bc84add04d13ed6c319aa7465d1b404892/frame.jsonld",
+                                        context=json_context
+                                        )
 
             # graph = Graph()
             # with open(v, "r", encoding="utf-8") as f:

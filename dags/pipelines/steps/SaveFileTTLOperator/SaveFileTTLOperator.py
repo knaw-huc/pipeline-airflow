@@ -26,7 +26,7 @@ class SaveFileTTLOperator(BaseOperator):
         if not previous_step and not return_value:
             self.logger.error("Nothing to save, no previous step found in context")
             raise ValueError("Nothing to save, previous step not found in context")
-        self.logger.info(f"Previous step: {previous_step}: Return value: {return_value}")
+        self.logger.debug(f"Previous step: {previous_step}: Return value: {return_value}")
         if previous_step:
             ttl_data = context['ti'].xcom_pull(task_ids=None, key=f"{previous_step.task_id}_{self.output_trace}")
             self.logger.info(f"Retrieved TTL data from XCom with key: {previous_step.task_id}_{self.output_trace}")

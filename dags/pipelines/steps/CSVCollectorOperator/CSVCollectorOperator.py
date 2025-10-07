@@ -10,7 +10,7 @@ class CSVCollectorOperator(BaseOperator):
     def execute(self, context):
         input_data = context['ti'].xcom_pull(task_ids=None, key='previous_output')
         if input_data:
-            self.logger.info(f"One input data received: {input_data}")
+            self.logger.debug(f"One input data received: {input_data}")
             self.logger.info(f"Task id: {self.task_id}")
             result = context['ti'].xcom_pull(task_ids=None, key=f"{self.message_queue}")
             if not result:
