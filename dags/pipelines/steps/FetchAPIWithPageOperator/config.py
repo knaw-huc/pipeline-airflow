@@ -1,7 +1,7 @@
 config = {
     "logLevel": 'info',
     "logFile": "app.log",
-    "outputDir": "output",
+    "outputDir": "/tmp",
     "outputJsonLd": "output.jsonld",
     "outputRdf": "output.ttl",
     "api": {
