@@ -72,11 +72,10 @@ x-airflow-common:
     - traefik-public
   volumes:
     - ./dags:/opt/airflow/dags
-    - ./logs:/opt/airflow/logs
-    - ./config:/opt/airflow/config
-    - ./plugins:/opt/airflow/plugins
+    - airflow_logs:/opt/airflow/logs
+    - airflow_config:/opt/airflow/config
+    - airflow_plugins:/opt/airflow/plugins
     - sample_data_vol:/tmp
-    - /var/run/docker.sock:/var/run/docker.sock
   #    - /backup/data:/backup/data
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
