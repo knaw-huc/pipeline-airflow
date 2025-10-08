@@ -14,6 +14,7 @@ dependencies = [
     "pyyaml>=6.0.2",
     "rdflib>=7.1.4",
     "saxonche>=12.8.0",
+    "tqdm>=4.67.1",
 ]
 
 [dependency-groups]
