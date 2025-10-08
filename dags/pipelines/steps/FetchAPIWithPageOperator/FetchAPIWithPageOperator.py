@@ -5,10 +5,14 @@ import httpx
 import logging
 import argparse
 from rdflib import Graph
+from urllib.parse import urlparse
 from airflow.models import BaseOperator
 from typing import Dict, List, Any, Union, LiteralString
 from .config import config
 from utils import get_step_names
+
+# TODO: FIX error in adding context to JSON-LD, all the fields are missing now
+
 
 # Setup logging
 logging.basicConfig(
@@ -23,15 +27,7 @@ http_client = httpx.Client(follow_redirects=True, timeout=httpx.Timeout(10.0))
 httpx_log = logging.getLogger("httpx")
 httpx_log.setLevel(logging.ERROR)
 
-table_map = {
-    "ccode": "countrycode",
-    "lifespan": "timespan",
-    "part_of": "locationpartof",
-    "external_id": "externalid",
-    "child_location": "location",
-    "parent_location": "location",
-}
-
+table_map = config["context"].get("table_map", {})
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -39,6 +35,15 @@ def parse_args():
     parser.add_argument('-t', '--tableName', type=str, help='Name of the table', default="location")
     parser.add_argument('-d', '--distance', type=int, help='Distance from the given table', default=3)
     return parser.parse_args()
+
+
+def is_valid_uri(uri: str) -> bool:
+    try:
+        result = urlparse(uri)
+        # Check for scheme and netloc for URLs, or at least scheme for URIs
+        return all([result.scheme, result.netloc or result.path])
+    except Exception:
+        return False
 
 
 def join_url(base: str, *paths: str) -> str:
@@ -60,39 +65,23 @@ def init_json_ld() -> Dict:
 
 def add_table_fields_to_context(json_ld: Dict, table_name: str, fields: Dict, table_prefix: str = "") -> Dict:
     context = json_ld["@context"]
-    if table_name in table_map:
-        logger.info(f"Changing table name in context from {table_name} to {table_map[table_name]}")
-        table_name = table_map[table_name]
     table_name_with_prefix = f"{table_prefix}{table_name}" if table_prefix else table_name
 
-    if table_name not in config["context"]["middleTables"]:
-        context[table_name] = join_url(config["context"]["baseURI"], table_name_with_prefix)
+    context[table_name] = join_url(config["context"]["baseURI"], table_name_with_prefix)
 
-        for field in fields:
-            if field not in config["context"]["uniqueField"]:
-                context[f"{table_name}-{field}"] = join_url(config["context"]["baseURI"], table_name_with_prefix, field)
-    else:
-        key_tuple = []
-        for field in fields:
-            if field not in config["context"]["uniqueField"]:
-                if field in table_map.keys():
-                    logger.debug(f"Mapping field {field} to {table_map[field]}")
-                    key_tuple.append([
-                        f"{table_map[field]}-{table_name}",
-                        join_url(config["context"]["baseURI"], table_map[field], table_name_with_prefix)
-                    ])
+    for field in fields:
+        if field not in config["context"]["uniqueField"]:
+            if field in table_map.keys():
+                logger.debug(f"Mapping field {field} to {table_map[field]}")
+                # special mapping case for child_location and parent_location to location
+                if field in ["child_location", "parent_location"]:
+                    context[f"{table_name}-{field}"] = join_url(config["context"]["baseURI"], table_name_with_prefix,
+                                                                field)
                 else:
-                    key_tuple.append(
-                        [f"{field}-{table_name}",
-                         join_url(config["context"]["baseURI"], field, table_name_with_prefix)
-                         ])
-
-        if table_name == "location2externalid":
-            key_tuple = [t for t in key_tuple if t[0] != 'relation-location2externalid']
-
-        context[key_tuple[0][0]] = key_tuple[1][1]
-        context[key_tuple[1][0]] = key_tuple[0][1]
-
+                    context[f"{table_name}-{table_map[field]}"] = join_url(config["context"]["baseURI"],
+                                                                           table_name_with_prefix, table_map[field])
+            else:
+                context[f"{table_name}-{field}"] = join_url(config["context"]["baseURI"], table_name_with_prefix, field)
     json_ld["@context"] = context
     return json_ld
 
@@ -110,24 +99,6 @@ def is_value_in_json(value: Union[str, int, bool], data: Any) -> bool:
                 return True
 
     return False
-
-
-def search_json_for_value2(data, value, path="", obj_type=None, key=None):
-    if data == value:
-        return path
-
-    if isinstance(data, dict):
-        for k, v in data.items():
-            result = search_json_for_value(v, value, f"{path}.{k}" if path else k)
-            if result is not None:
-                return result
-    elif isinstance(data, list):
-        for idx, item in enumerate(data):
-            result = search_json_for_value(item, value, f"{path}[{idx}]" if path else f"[{idx}]")
-            if result is not None:
-                return result
-
-    return None
 
 
 def search_json_for_value(data, filter_dict, path=""):
@@ -336,8 +307,6 @@ def get_related_tables(table_name: str, tables: Dict) -> Dict:
     table_metadata = fetch_table_metadata(table_name)
 
     for related_table in table_metadata.get("metadata", {}).get("foreign_keys", {}).keys():
-        if related_table in table_map.keys():
-            related_table = table_map[related_table]
         outgoing.append(related_table)
     related_tables[table_name]["outgoing"] = outgoing
 
@@ -346,8 +315,6 @@ def get_related_tables(table_name: str, tables: Dict) -> Dict:
     for table in tables:
         table_metadata = fetch_table_metadata(table)
         if table_name in table_metadata.get("metadata", {}).get("foreign_keys", {}).keys():
-            if table in table_map.keys():
-                table = table_map[table]
             incoming.append(table)
     related_tables[table_name]["incoming"] = incoming
 
@@ -365,7 +332,7 @@ def get_related_tables_with_distance(
 
     table_name = replace_table_name(table_name)
 
-    if distance < 1:
+    if distance < 0:
         return related_tables
 
     current_related_tables = get_related_tables(table_name, tables)
@@ -379,6 +346,52 @@ def get_related_tables_with_distance(
             get_related_tables_with_distance(related_table, tables, distance - 1, related_tables)
 
     return related_tables
+
+
+def _add_each_field(key, record_data, table_name_with_prefix, table_name, record, is_outgoing):
+    if table_name == "location" and key == "point":
+        # Special handling for 'point' field in 'location' table
+        record_data[
+            f"{table_name_with_prefix}-{key}"] = f"POINT({record[key]["coordinates"][0]} {record[key]["coordinates"][1]})"
+    else:
+        if key in table_map.keys():
+            logger.debug(f"Mapping key {key} to {table_map[key]}")
+            if is_outgoing:
+                if table_name in ["locationpartof"] and key in ["child_location", "parent_location"]:
+                    # special mapping case for child_location and parent_location to location
+                    record_data[f"{table_name_with_prefix}-{key}"] = (
+                        {"@id": join_url(config["context"]["baseURI"], table_map[key], record[key])}
+                    )
+                else:
+                    record_data[f"{table_name_with_prefix}-{table_map[key]}"] = (
+                        {"@id": join_url(config["context"]["baseURI"], table_map[key], record[key])}
+                    )
+            elif is_valid_uri(record[key]):
+                if table_name in ["locationpartof"] and key in ["child_location", "parent_location"]:
+                    # special mapping case for child_location and parent_location to location
+                    record_data[f"{table_name_with_prefix}-{key}"] = (
+                        {"@id": record[key]}
+                    )
+                else:
+                    record_data[f"{table_name_with_prefix}-{table_map[key]}"] = (
+                        {"@id": record[key]}
+                    )
+            else:
+                if table_name in ["locationpartof"] and key in ["child_location", "parent_location"]:
+                    # special mapping case for child_location and parent_location to location
+                    record_data[f"{table_name_with_prefix}-{key}"] = record[key]
+                else:
+                    record_data[f"{table_name_with_prefix}-{table_map[key]}"] = record[key]
+        else:
+            if is_outgoing:
+                record_data[f"{table_name_with_prefix}-{key}"] = (
+                    {"@id": join_url(config["context"]["baseURI"], key, record[key])})
+            elif is_valid_uri(record[key]):
+                record_data[f"{table_name_with_prefix}-{key}"] = (
+                    {"@id": record[key]})
+            else:
+                record_data[f"{table_name_with_prefix}-{key}"] = record[key]
+    return record_data
 
 
 # Record processing
@@ -403,95 +416,32 @@ def add_record_to_graph(
         for key in record:
             if not check_linkage or is_value_in_json(record_data["@id"], related_tables):
                 if key not in config["context"]["uniqueField"] and record[key]:
+                    if record[key] is None or (isinstance(record[key], str) and record[key].strip() == ""):
+                        continue
                     is_outgoing = related_tables[table_name].get("outgoing", []) and key in related_tables[table_name][
                         "outgoing"]
-                    if table_name == "location" and key == "point":
-                        # Special handling for 'point' field in 'location' table
-                        record_data[f"{table_name_with_prefix}-{key}"] = f"POINT({record[key]["coordinates"][0]},{record[key]["coordinates"][1]})"
-
-                    else:
-                        record_data[f"{table_name_with_prefix}-{key}"] = (
-                            {"@id": join_url(config["context"]["baseURI"], key, record[key])}
-                            if is_outgoing else record[key]
-                        )
-                    # if key == "point":
-                    #     logger.info(f"debug: {table_name=}, {record_data}")
-                    #     exit("stop")
-
-        if "records" not in related_tables[table_name]:
-            related_tables[table_name]["records"] = []
-
-        related_tables[table_name]["records"].append(record_data["@id"])
-        graph.append(record_data)
+                    record_data = _add_each_field(key, record_data, table_name_with_prefix, table_name, record,
+                                                  is_outgoing)
     else:
-        key_tuple = []
         for key in record:
             if key not in config["context"]["uniqueField"]:
+                if record[key] is None or (isinstance(record[key], str) and record[key].strip() == ""):
+                    continue
+                is_outgoing = related_tables[table_name].get("outgoing", []) and key in related_tables[table_name][
+                    "outgoing"]
                 try:
-                    if key in table_map.keys():
-                        logger.debug(f"Mapping key {key} to {table_map[key]}")
-                        key_tuple.append([
-                            f"{table_map[key]}-{table_name}",
-                            join_url(config["context"]["baseURI"], table_map[key], record[key])
-                        ])
-                    else:
-                        key_tuple.append([
-                            f"{key}-{table_name}",
-                            join_url(config["context"]["baseURI"], key, record[key])
-                        ])
+                    record_data = _add_each_field(key, record_data, table_name_with_prefix, table_name, record,
+                                                  is_outgoing)
                 except Exception as e:
                     logger.error(
                         f"Error adding record to graph: {e} {config['context']['baseURI']} {key} {json.dumps(record, indent=2)}")
                     raise
 
-        if table_name == "location2externalid":
-            key_tuple = [t for t in key_tuple if t[0] != 'relation-location2externalid']
+    if "records" not in related_tables[table_name]:
+        related_tables[table_name]["records"] = []
 
-        if len(key_tuple) >= 2:
-            key1, key2 = key_tuple[0][0], key_tuple[1][0]
-            value1, value2 = key_tuple[0][1], key_tuple[1][1]
-
-            path1 = search_json_for_value(json_ld, {"@type": f"{key1.split("-")[0]}", "@id": value1})
-            path2 = search_json_for_value(json_ld, {"@type": f"{key2.split("-")[0]}", "@id": value2})
-
-
-            obj1 = get_object_from_path(json_ld, ".".join(path1.split(".")[:2])) if path1 else None
-            obj2 = get_object_from_path(json_ld, ".".join(path2.split(".")[:2])) if path2 else None
-
-            if obj1 and obj2:
-                if value2.rsplit('/', 1)[0] not in obj1:
-                    obj1[value2.rsplit('/', 1)[0]] = {"@id": value2}
-                else:
-                    if isinstance(obj1[value2.rsplit('/', 1)[0]], list):
-                        if not any(item.get("@id") == value2 for item in obj1[value2.rsplit('/', 1)[0]]):
-                            obj1[value2.rsplit('/', 1)[0]].append({"@id": value2})
-                    elif isinstance(obj1[value2.rsplit('/', 1)[0]], dict):
-                        if obj1[value2.rsplit('/', 1)[0]].get("@id") != value2:
-                            obj1[value2.rsplit('/', 1)[0]] = [obj1[value2.rsplit('/', 1)[0]], {"@id": value2}]
-                    else:
-                        raise Exception(f"Unexpected type for obj1[{value2.rsplit('/', 1)[0]}]: {type(obj1[value2.rsplit('/', 1)[0]])}")
-
-                if value1.rsplit('/', 1)[0] not in obj2:
-                    obj2[value1.rsplit('/', 1)[0]] = {"@id": value1}
-                else:
-                    if isinstance(obj2[value1.rsplit('/', 1)[0]], list):
-                        if not any(item.get("@id") == value1 for item in obj2[value1.rsplit('/', 1)[0]]):
-                            obj2[value1.rsplit('/', 1)[0]].append({"@id": value1})
-                    elif isinstance(obj2[value1.rsplit('/', 1)[0]], dict):
-                        if obj2[value1.rsplit('/', 1)[0]].get("@id") != value1:
-                            obj2[value1.rsplit('/', 1)[0]] = [obj2[value1.rsplit('/', 1)[0]], {"@id": value1}]
-                    else:
-                        raise Exception(f"Unexpected type for obj2[{value1.rsplit('/', 1)[0]}]: {type(obj2[value1.rsplit('/', 1)[0]])}")
-
-                # obj1[value2.rsplit('/', 1)[0]] = {"@id": value2}
-                # obj2[value1.rsplit('/', 1)[0]] = {"@id": value1}
-
-            # if table_name in ("location2countrycode", "ccode"):
-            #     logger.info(f"debugging location2countrycode: {key1=}: {value1=}, {key2=}: {value2=}")
-            #     logger.info(f"  {path1=}, {path2=}")
-            #     logger.info(f"obj1: {json.dumps(obj1, indent=2)}")
-            #     logger.info(f"obj2: {json.dumps(obj2, indent=2)}")
-            #     exit("stop")
+    related_tables[table_name]["records"].append(record_data["@id"])
+    graph.append(record_data)
     json_ld["@graph"] = graph
     return json_ld
 
@@ -546,13 +496,13 @@ def main(table_name: str, distance: int = 3):
                     json_ld = add_record_to_graph(json_ld, related_table_name, related_tables, record, "", False)
 
         # Process middle tables
-        logger.info("Processing middle tables")
         for related_table_name in related_tables:
             if related_table_name in config["context"]["middleTables"]:
                 logger.info(f"Processing middle table: '{related_table_name}'")
                 table = cache_related_tables[related_table_name]
-                # json_ld = add_table_fields_to_context(json_ld, related_table_name,
-                #                                       table["metadata"]["metadata"].get("fields", {}))
+                json_ld = add_table_fields_to_context(json_ld, related_table_name,
+                                                      table["metadata"]["metadata"].get("fields", {}))
+
                 for record in table["data"]:
                     json_ld = add_record_to_graph(json_ld, related_table_name, related_tables, record)
 

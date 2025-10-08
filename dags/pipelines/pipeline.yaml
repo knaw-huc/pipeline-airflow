@@ -10,12 +10,12 @@ pipeline:
     fetch_api_with_page:
       type: "FetchAPIWithPageOperator"
       table_name: "location"
-      distance: 3
+      distance: 4
       output_trace: "ttl"
       output_store: "ttl"
 #    test_comunica:
 #      type: "EmitTTLOperator"
-#      input_file_path: "http://nginx/locations.ttl"
+#      input_file_path: "http://util-server:8000/static/output.ttl"
 #      output_store: "ttl"
 #      output_trace: "ttl"
 
@@ -28,42 +28,11 @@ pipeline:
       type: "RunSparqlComunicaOperator"
       docker_image: "comunica/query-sparql"
       docker_network: "traefik-public"
-      docker_rdf_file: "http://nginx/output.ttl"
+      docker_rdf_file: "http://util-server:8000/static/output.ttl"
       docker_output_format: "text/csv"
       output_trace: "csv"
       output_store: "csv"
-#      query: "/tmp/query.sparql"
-      query: "
-      select * 
-where {
-?location a <http://example.globalise.nl/temp/location>;
-   	<http://example.globalise.nl/temp/location/_label> ?_label;
-    <http://example.globalise.nl/temp/location/comments> ?comments;
-    <http://example.globalise.nl/temp/location/coord_certainty> ?coord_certainty;
-    <http://example.globalise.nl/temp/location/glob_id> ?glob_id;
-    <http://example.globalise.nl/temp/location/latitude> ?latitude;
-    <http://example.globalise.nl/temp/location/longitude> ?longitude;
-    <http://example.globalise.nl/temp/location/point> ?point.
-
-OPTIONAL {    
-	?location <http://example.globalise.nl/temp/location/location2coordsource> ?_coordsource.
-	?_coordsource <http://example.globalise.nl/temp/source/page_no> ?coordsource_page_no;
-    	<http://example.globalise.nl/temp/source/zotero_url> ?coordsource_zotero_url.
-}
-    
-OPTIONAL {
-    ?location <http://example.globalise.nl/temp/location/location2source> ?_source.
-	?_source <http://example.globalise.nl/temp/source/page_no> ?source_page_no;
-    	<http://example.globalise.nl/temp/source/zotero_url> ?source_zotero_url.
-}
-    
-OPTIONAL {
-    ?_l <http://example.globalise.nl/temp/label/locationlabel> ?location;
-        <http://example.globalise.nl/temp/label/label> ?label;
-        <http://example.globalise.nl/temp/label/type> ?label_type.
-}
-} limit 10 OFFSET 10
-"
+      query: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/entities/locations/universal-query.sparql"
     csv_iterator:
       type: "CSVIteratorOperator"
       output_trace: "csv"
@@ -74,15 +43,15 @@ OPTIONAL {
 #          type: "PrintOperator"
         generate_sparql_per_csv_row:
           type: "XSLTTransformationOperator"
-          fields_file: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/locations/fields.xml"
+          fields_file: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/entities/locations/fields.xml"
           xslt_file: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/src/toSPARQL.xsl"
           xslt_params:
-            lookup-uri: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/locations/lookup.xml"
-            ns-uri: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/locations/GLBM_2.xml"
-            root-uri: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/locations/root.xml"
+            lookup-uri: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/entities/lookup.xml"
+            ns-uri: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/entities/GLBM_2.xml"
+            root-uri: "https://raw.githubusercontent.com/globalise-huygens/gl-etl/refs/heads/main/entities/locations/root.xml"
           output_trace: "sparql"
           output_store: "sparql"
-        generate_tto_per_csv_row:
+        generate_ttl_per_csv_row:
           type: "CSVToTTLOperator"
           base_uri: "http://example.globalise.nl/temp/location"
         run_sparql_on_csv_ttl_row:
@@ -94,3 +63,16 @@ OPTIONAL {
           output_trace: "ttl"
           output_store: "ttl"
           query: "file_uri:sparql"
+        collect_ttl_rows:
+          type: "CSVCollectorOperator"
+          message_queue: "all_the_rows"
+    get_unique_places:
+      type: "SplitGraphOperator"
+      message_queue: "all_the_rows"
+      output_trace: "ttl"
+      output_store: "ttl"
+    convert_ttl_to_jsonld:
+      type: "ConvertTtlToJsonldOperator"
+      message_queue: "return_value"
+      output_trace: "jsonld"
+      output_store: "jsonld"

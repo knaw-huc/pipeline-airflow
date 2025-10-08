@@ -12,7 +12,8 @@ class JSONToCSVOperator(BaseOperator):
     def execute(self, context):
         input_data = context['ti'].xcom_pull(task_ids=None, key='previous_output')
         if input_data:
-            self.logger.info(f"Input data received: {input_data}")
+            self.logger.info("Input data received from 'previous_output'!")
+            self.logger.debug(f"Input data received: {input_data}")
             otuput = io.StringIO()
             writer = csv.DictWriter(otuput, fieldnames=input_data.keys())
             writer.writeheader()

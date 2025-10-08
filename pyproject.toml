@@ -10,9 +10,11 @@ dependencies = [
     "httpx>=0.28.1",
     "jsonschema>=4.24.0",
     "pandas>=2.3.2",
+    "pyld>=2.0.4",
     "pyyaml>=6.0.2",
     "rdflib>=7.1.4",
     "saxonche>=12.8.0",
+    "tqdm>=4.67.1",
 ]
 
 [dependency-groups]
