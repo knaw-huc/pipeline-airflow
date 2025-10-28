@@ -7,17 +7,17 @@ pipeline:
 #    location: ""  # Default value
 
   tasks:
-    fetch_api_with_page:
-      type: "FetchAPIWithPageOperator"
-      table_name: "location"
-      distance: 4
-      output_trace: "ttl"
-      output_store: "ttl"
-#    test_comunica:
-#      type: "EmitTTLOperator"
-#      input_file_path: "http://util-server:8000/static/output.ttl"
-#      output_store: "ttl"
+#    fetch_api_with_page:
+#      type: "FetchAPIWithPageOperator"
+#      table_name: "location"
+#      distance: 4
 #      output_trace: "ttl"
+#      output_store: "ttl"
+    test_comunica:
+      type: "EmitTTLOperator"
+      input_file_path: "http://util-server:8000/static/output.ttl"
+      output_store: "ttl"
+      output_trace: "ttl"
 
     save_file_ttl:
       type: "SaveFileTTLOperator"
