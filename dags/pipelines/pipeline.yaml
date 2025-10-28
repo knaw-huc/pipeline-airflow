@@ -15,7 +15,7 @@ pipeline:
 #      output_store: "ttl"
     test_comunica:
       type: "EmitTTLOperator"
-      input_file_path: "http://util-server:8000/static/output.ttl"
+      input_file_path: "http://etl-util-server:8000/static/output.ttl"
       output_store: "ttl"
       output_trace: "ttl"
 
@@ -28,7 +28,7 @@ pipeline:
       type: "RunSparqlComunicaOperator"
       docker_image: "comunica/query-sparql"
       docker_network: "traefik-public"
-      docker_rdf_file: "http://util-server:8000/static/output.ttl"
+      docker_rdf_file: "http://etl-util-server:8000/static/output.ttl"
       docker_output_format: "text/csv"
       output_trace: "csv"
       output_store: "csv"

@@ -88,7 +88,7 @@ x-airflow-common:
 services:
   util-server:
     image: registry.diginfra.net/tsd/util-server:latest
-    container_name: util-server
+    container_name: etl-util-server
     restart: unless-stopped
     volumes:
       - "sample_data_vol:/app/tmp"
