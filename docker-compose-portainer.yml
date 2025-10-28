@@ -86,7 +86,7 @@ x-airflow-common:
       condition: service_healthy
 
 services:
-  util-server:
+  etl-util-server:
     image: registry.diginfra.net/tsd/util-server:latest
     container_name: etl-util-server
     restart: unless-stopped
