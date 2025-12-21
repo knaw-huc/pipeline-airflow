@@ -26,3 +26,5 @@ logs
 plugins
 sample_data
 
+.DS_Store
+/input

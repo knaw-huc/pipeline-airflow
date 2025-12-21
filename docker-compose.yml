@@ -98,19 +98,20 @@ services:
     ports:
       - "48080:80"
     volumes:
-      - "sample_data_vol:/usr/share/nginx/html"
+#      - "sample_data_vol:/usr/share/nginx/html"
+      - ./input/location.ttl:/usr/share/nginx/html/output.ttl
       - "./default.conf:/etc/nginx/conf.d/default.conf:ro"
     networks:
       - traefik-public
 
   util-server:
-    image: registry.diginfra.net/tsd/util-server:latest
-    container_name: util-server
+    image: ghcr.io/knaw-huc/util-server:1.0.rc5
+    container_name: etl-util-server
     restart: unless-stopped
     ports:
       - "8000:8000"
     volumes:
-#      - "./tmp:/app/tmp"
+#     - "./tmp:/app/tmp"
       - "sample_data_vol:/app/tmp"
     networks:
       - traefik-public
